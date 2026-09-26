@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 福建农林大学金山学院正方教务为 http 明文（jsxyjwgl.fafu.edu.cn），
+     此处仅放行教育网常见明文域名，其余仍走默认安全策略 -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">fafu.edu.cn</domain>
+        <domain includeSubdomains="true">59.79.232.64</domain>
+    </domain-config>
+</network-security-config>

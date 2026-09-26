@@ -1,0 +1,13 @@
+# Gradle / Android 构建产物
+.gradle/
+build/
+app/build/
+local.properties
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# 打包环境工具链（体积大，不入库）
+parked_out/
