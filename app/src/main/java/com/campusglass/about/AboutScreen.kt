@@ -81,6 +81,7 @@ private val credits = listOf(
 
 /** 版本修改日志 */
 private val changelog = listOf(
+    "v2.14" to "公交新增路线图（103/105/107/K2 站点链路图内置）；发车时刻分上午/下午/晚间排版；恢复邮箱（仅不公开 QQ 号）",
     "v2.13" to "关于页/README 移除 QQ 号与 QQ 邮箱（隐私保护），联系改留 GitHub；含 v2.12 全部更新",
     "v2.12" to "拼多多身份码/包裹页新增微信入口（含驿站点）；课表学期校准（9/28=第五周）；公交时刻核实补齐（105早高峰密班、107首班7:15、新增工业园区专线固定班次）",
     "v2.11" to "快递查询新增历史记录（点击重查/单条删除/清空）；关于页新增作者 GitHub/QQ/邮箱、代码归属说明与欢迎反馈",
@@ -156,7 +157,8 @@ fun AboutScreen() {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("📮 联系作者 · 交流反馈", style = MaterialTheme.typography.titleMedium)
                     Text("GitHub：Void_Blank（Blank2007）", style = MaterialTheme.typography.bodyMedium)
-                    Text("联系渠道：GitHub Issues / 私信（隐私原因不公开其他联系方式）", style = MaterialTheme.typography.bodySmall)
+                    Text("邮箱：1553008865@qq.com", style = MaterialTheme.typography.bodyMedium)
+                    Text("（QQ 号不公开；交流欢迎 GitHub 或邮件 ✉️）", style = MaterialTheme.typography.bodySmall)
                     OutlinedButton(onClick = {
                         runCatching {
                             context.startActivity(

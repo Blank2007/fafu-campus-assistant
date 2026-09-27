@@ -2,9 +2,12 @@ package com.campusglass.bus
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -21,6 +25,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -30,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -115,10 +121,18 @@ fun BusScreen() {
             text = {
                 Column(
                     Modifier
-                        .heightIn(max = 480.dp)
+                        .heightIn(max = 520.dp)
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    // 路线图（站点链路图）
+                    if (route.imageRes != 0) {
+                        Image(
+                            painter = painterResource(route.imageRes),
+                            contentDescription = "路线图",
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                     Text(route.endpoints, style = MaterialTheme.typography.bodyMedium)
                     Text(
                         "首班 ${route.firstDeparture} · 末班 ${route.lastDeparture} · ${route.fare}",
@@ -138,10 +152,7 @@ fun BusScreen() {
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                         )
-                        Text(
-                            times.chunked(6).joinToString("\n") { it.joinToString("  ") },
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+                        TimeGrid(times)
                     }
 
                     if (route.upStops.isNotEmpty()) {
@@ -164,6 +175,44 @@ fun BusScreen() {
                 TextButton(onClick = { detail = null }) { Text("关闭") }
             },
         )
+    }
+}
+
+/** 发车时刻分时段排版：上午/下午/晚间三段小格子 */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TimeGrid(times: List<String>) {
+    val groups = listOf(
+        "上午" to times.filter { it < "12:00" },
+        "下午" to times.filter { it >= "12:00" && it < "18:00" },
+        "晚间" to times.filter { it >= "18:00" },
+    )
+    groups.forEach { (label, list) ->
+        if (list.isEmpty()) return@forEach
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold,
+        )
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            list.forEach { t ->
+                Surface(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                    shape = RoundedCornerShape(6.dp),
+                ) {
+                    Text(
+                        t,
+                        Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+        }
     }
 }
 

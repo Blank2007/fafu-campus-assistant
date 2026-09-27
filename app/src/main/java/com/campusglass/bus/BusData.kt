@@ -23,6 +23,7 @@ data class BusRoute(
     val peakIntervalMin: Int? = null,
     val offPeakIntervalMin: Int? = null,
     val fixedTimes: List<String>? = null,   // 固定班次时刻（有则直接用）
+    val imageRes: Int = 0,                  // 路线图（0=无）
     val upStops: List<String> = emptyList(),
     val downStops: List<String> = emptyList(),
 )
@@ -51,6 +52,7 @@ object BusData {
             note = "单程 7.5 公里约 15 分钟，直达商圈（新岭总站发出首班 7:45，2026-08 核实）",
             peakFrom = "7:45", peakTo = "8:00", peakIntervalMin = 10,
             offPeakIntervalMin = 15,
+            imageRes = com.campusglass.R.drawable.route_103,
             upStops = listOf(
                 "万达广场", "万达广场南", "滨江壹号", "童子山加油站", "高一路", "万辉路",
                 "兴华啤酒", "创业园三期", "海源新材料", CAMPUS_STOP, "郑氏骨科医院", "新岭公交总站",
@@ -73,6 +75,7 @@ object BusData {
             note = "25 分钟跑完 14 公里；2026-08 走向经 童游大街北/巨电新能源/碧全月亮湾/海林大厦/南平移动公司/芦上/宝鼎路",
             peakFrom = "7:30", peakTo = "8:00", peakIntervalMin = 10,
             offPeakIntervalMin = 20,
+            imageRes = com.campusglass.R.drawable.route_105,
             upStops = listOf(
                 "新区管委会", "武夷山水城（市农发行）", "南平大剧院", "图书馆", "一中初中部",
                 "云谷校区", "瑞玺苑", "云谷实验学校", "建发和鸣", "法治公园", "碧全江誉",
@@ -98,6 +101,7 @@ object BusData {
             mapKeyword = "建阳107路公交",
             note = "首班 7:15（2026-09 核实，非 6:50）；去建发悦城坐到「童游农贸（烟草公司）」换乘建阳1路",
             offPeakIntervalMin = 20,
+            imageRes = com.campusglass.R.drawable.route_107,
             upStops = listOf(
                 "宋慈广场（水吉车站）", "市立医院", "金茂广场", "童游农贸（烟草公司）", "安居楼",
                 "社区卫生中心", "曼头山路口", "和顺景园", "供电局", "检察院", "火车站",
@@ -136,6 +140,7 @@ object BusData {
             destTags = listOf("动车站"),
             mapKeyword = "建阳K2路公交",
             note = "全程 25 站：西区公交站→教师进修学院→二院→宝山路口→汽车站→总工会→市立医院→鹏宇佳苑→安居楼→社区卫生中心→和顺景园→供电局→火车站→万晟星城→万晟皇庭→周家→赤岸→兴华啤酒→创业园三期→海源新材料→福建农林大学南平校区→新安路→贵口→芹口(将口收费站)→高铁南平市站",
+            imageRes = com.campusglass.R.drawable.route_k2,
         ),
         BusRoute(
             name = "建阳1路（去建发悦城的接驳线）",
