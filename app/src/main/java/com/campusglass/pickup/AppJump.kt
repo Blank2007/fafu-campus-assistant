@@ -56,6 +56,54 @@ object AppJump {
     /** 拼多多 · 首页 */
     fun openPddHome(context: Context) = jumpChain(context, listOf("pinduoduo://", PDD_HOME), PDD_PKG)
 
+    const val WECHAT_PKG = "com.tencent.mm"
+
+    /**
+     * 拼多多驿站在微信里的身份码/包裹页入口（用户提供，含其驿站点 A082507556）。
+     * 微信 OAuth 链接需在微信内打开：复制链接 + 自动拉起微信，用户粘贴到
+     * 「文件传输助手」点击即可直达身份码/包裹页。
+     */
+    const val PDD_WECHAT_PACKAGE_URL =
+        "https://open.weixin.qq.com/connect/oauth2/authorize?appid=wx913449bbda3b9f9a" +
+            "&redirect_uri=https://mdkd.pinduoduo.com/weixin/login?redirect_url=/weixin/package" +
+            "&station_code=A082507556&response_type=code&scope=snsapi_base" +
+            "&state=false&connect_redirect=1#wechat_redirect"
+
+    fun openPddWeChatPackage(context: Context) {
+        // 复制链接到剪贴板
+        runCatching {
+            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("拼多多身份码链接", PDD_WECHAT_PACKAGE_URL))
+        }
+        // 拉起微信
+        val launched = runCatching {
+            val launch = context.packageManager.getLaunchIntentForPackage(WECHAT_PKG)
+            if (launch != null) {
+                context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                true
+            } else false
+        }.getOrDefault(false)
+        if (launched) {
+            android.widget.Toast.makeText(
+                context,
+                "链接已复制：在微信里发给「文件传输助手」并点击，直达身份码",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+        } else {
+            // 没装微信 → 浏览器试开
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(PDD_WECHAT_PACKAGE_URL))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+        }
+    }
+
+    /** 浏览器直接试开（部分环境不走微信也能进） */
+    fun openPddWeChatInBrowser(context: Context) =
+        jumpChain(context, listOf(PDD_WECHAT_PACKAGE_URL), PDD_PKG)
+
     /** 直接跳指定 URI（嗅探出的真实路由用） */
     fun openUri(context: Context, uri: String, pkg: String) = jumpChain(context, listOf(uri), pkg)
 

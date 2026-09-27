@@ -122,9 +122,19 @@ fun PickupScreen() {
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     )
                     Button(
-                        onClick = { AppJump.openPddPersonal(context) },
+                        onClick = { AppJump.openPddWeChatPackage(context) },
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("打开拼多多·个人中心") }
+                    ) { Text("微信打开身份码/包裹页（推荐）") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { AppJump.openPddPersonal(context) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("拼多多个人中心") }
+                        OutlinedButton(
+                            onClick = { AppJump.openPddWeChatInBrowser(context) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("浏览器试开") }
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(
                             onClick = {
@@ -145,6 +155,12 @@ fun PickupScreen() {
                             modifier = Modifier.weight(1f),
                         ) { Text("仅打开拼多多") }
                     }
+                    Text(
+                        "微信打开方式：点按钮后自动复制链接并拉起微信，" +
+                            "粘贴到「文件传输助手」点击即可看到身份码/包裹（含你的驿站 A082507556）",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
                 }
             }
         }

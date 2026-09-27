@@ -80,8 +80,8 @@ object ScheduleStore {
 
     /** 学期第一周周一 */
     fun termStart(c: Context): LocalDate = runCatching {
-        LocalDate.parse(prefs(c).getString("termStart", "2026-09-07"), DATE_FMT)
-    }.getOrDefault(LocalDate.of(2026, 9, 7))
+        LocalDate.parse(prefs(c).getString("termStart", "2026-08-31"), DATE_FMT)
+    }.getOrDefault(LocalDate.of(2026, 8, 31))   // 2026-09-28 为第 5 周周一
 
     fun setTermStart(c: Context, date: LocalDate) {
         prefs(c).edit().putString("termStart", date.format(DATE_FMT)).apply()
