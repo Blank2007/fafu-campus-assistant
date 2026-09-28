@@ -7,7 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-// 玻璃底色（配合极光背景使用）——强制浅色模式
+// 玻璃底色常量（历史遗留保留）
 val GlassTintLight = Color.White.copy(alpha = 0.32f)
 val GlassEdgeHighlight = Color.White.copy(alpha = 0.85f)
 val GlassEdgeShadow = Color.Black.copy(alpha = 0.30f)
@@ -21,8 +21,7 @@ private val LightColors = lightColorScheme(
 )
 
 /**
- * 全局主题：按需求**强制浅色**（不提供深色模式）。
- * Material Design 3 配色，Android 12+ 取动态取色（仅浅色）。
+ * 全局主题：强制浅色 + 可选主题色（设置页可改，0=跟随系统动态取色）。
  */
 @Composable
 fun CampusGlassTheme(
@@ -30,10 +29,11 @@ fun CampusGlassTheme(
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val colorScheme = if (dynamicColor) {
-        dynamicLightColorScheme(context)
-    } else {
-        LightColors
+    val idx = ThemePrefs.themeColorIndex.value
+    val colorScheme = when {
+        idx == 0 && dynamicColor -> dynamicLightColorScheme(context)
+        idx == 0 -> LightColors
+        else -> LightColors.copy(primary = ThemePrefs.THEME_COLORS[idx].second)
     }
     MaterialTheme(colorScheme = colorScheme, content = content)
 }
