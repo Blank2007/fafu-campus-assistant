@@ -1,15 +1,21 @@
 package com.campusglass
 
+import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -28,7 +34,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -48,13 +54,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.campusglass.bus.BusScreen
 import com.campusglass.pickup.PickupScreen
@@ -84,100 +92,139 @@ class MainActivity : ComponentActivity() {
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     HOME("首页", Icons.Filled.Home),
-    PICKUP("取件码", Icons.Filled.QrCodeScanner),
     SCHEDULE("课表", Icons.Filled.School),
+    PICKUP("快递", Icons.Filled.LocalShipping),
     BUS("公交", Icons.Filled.DirectionsBus),
     SETTINGS("设置", Icons.Filled.Settings),
 }
 
 /**
- * 底部悬浮亚克力功能栏 + 全屏背景（异形屏/挖孔屏铺满：背景画在 Scaffold 之下，
- * 状态栏、挖孔、手势条区域全部覆盖）。
+ * 悬浮亚克力底栏（下拉滚动时自动隐藏）+ 全屏背景（异形屏铺满、按屏幕尺寸裁切）。
  */
 @Composable
 fun CampusGlassApp() {
     var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
     val glass = rememberGlassState()
-    val dark = ThemePrefs.darkMode.value
+    val dark = when (ThemePrefs.themeMode.value) {
+        ThemePrefs.ThemeMode.DARK -> true
+        ThemePrefs.ThemeMode.LIGHT -> false
+        ThemePrefs.ThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+    }
+    val acrylicOn = ThemePrefs.acrylicEnabled.value
+
+    // 底栏自动隐藏：内容下滑隐藏，上滑出现
+    var barVisible by remember { mutableStateOf(true) }
+    val scrollConn = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (available.y < -12f) barVisible = false
+                else if (available.y > 12f) barVisible = true
+                return Offset.Zero
+            }
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
-        // 背景铺满整个窗口（含异形屏安全区之外）
         AppBackground(glass)
 
         CompositionLocalProvider(LocalGlass provides glass) {
-        Scaffold(
-            containerColor = Color.Transparent,
-            contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
-            bottomBar = {
-                // 悬浮亚克力底栏
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
-                        .padding(start = 18.dp, end = 18.dp, bottom = 10.dp),
-                    contentAlignment = Alignment.BottomCenter,
-                ) {
-                    NavigationBar(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .acrylic(glass, dark, shape = RoundedCornerShape(26.dp)),
-                        containerColor = Color.Transparent,
-                        tonalElevation = 0.dp,
+            Scaffold(
+                containerColor = Color.Transparent,
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                bottomBar = {
+                    AnimatedVisibility(
+                        visible = barVisible,
+                        enter = slideInVertically(tween(220)) { it },
+                        exit = slideOutVertically(tween(180)) { it },
                     ) {
-                        Tab.entries.forEach { t ->
-                            NavigationBarItem(
-                                selected = tab == t,
-                                onClick = { tab = t },
-                                icon = { Icon(t.icon, contentDescription = t.label) },
-                                label = { Text(t.label) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                                ),
-                            )
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
+                                .padding(start = 18.dp, end = 18.dp, bottom = 10.dp),
+                            contentAlignment = Alignment.BottomCenter,
+                        ) {
+                            val barModifier = if (acrylicOn) {
+                                Modifier
+                                    .fillMaxWidth()
+                                    .acrylic(glass, dark, shape = RoundedCornerShape(26.dp))
+                            } else {
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(26.dp))
+                                    .background(MaterialTheme.colorScheme.surface)
+                            }
+                            NavigationBar(
+                                modifier = barModifier,
+                                containerColor = Color.Transparent,
+                                tonalElevation = 0.dp,
+                                windowInsets = WindowInsets(0, 0, 0, 0),
+                            ) {
+                                Tab.entries.forEach { t ->
+                                    NavigationBarItem(
+                                        selected = tab == t,
+                                        onClick = { tab = t },
+                                        icon = { Icon(t.icon, contentDescription = t.label) },
+                                        label = { Text(t.label) },
+                                        colors = NavigationBarItemDefaults.colors(
+                                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                                        ),
+                                    )
+                                }
+                            }
                         }
                     }
-                }
-            },
-        ) { padding ->
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))
-                    .padding(padding)
-            ) {
-                AnimatedContent(
-                    targetState = tab,
-                    transitionSpec = {
-                        val forward = targetState.ordinal >= initialState.ordinal
-                        val dir = if (forward) 1 else -1
-                        (fadeIn(tween(220)) + slideInHorizontally(tween(260)) { it / 4 * dir }) togetherWith
-                            (fadeOut(tween(160)) + slideOutHorizontally(tween(260)) { -it / 4 * dir })
-                    },
-                    label = "tab",
-                ) { t ->
-                    when (t) {
-                        Tab.HOME -> HomeScreen(onGoto = { tab = homeTabOf(it) })
-                        Tab.PICKUP -> PickupScreen()
-                        Tab.SCHEDULE -> ScheduleScreen()
-                        Tab.BUS -> BusScreen()
-                        Tab.SETTINGS -> SettingsScreen()
+                },
+            ) { padding ->
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))
+                        .padding(padding)
+                        .nestedScroll(scrollConn)
+                ) {
+                    AnimatedContent(
+                        targetState = tab,
+                        transitionSpec = {
+                            val forward = targetState.ordinal >= initialState.ordinal
+                            val dir = if (forward) 1 else -1
+                            (fadeIn(tween(220)) + slideInHorizontally(tween(260)) { it / 4 * dir }) togetherWith
+                                (fadeOut(tween(160)) + slideOutHorizontally(tween(260)) { -it / 4 * dir })
+                        },
+                        label = "tab",
+                    ) { t ->
+                        when (t) {
+                            Tab.HOME -> HomeScreen(onGoto = { tab = homeTabOf(it) })
+                            Tab.PICKUP -> PickupScreen()
+                            Tab.SCHEDULE -> ScheduleScreen()
+                            Tab.BUS -> BusScreen()
+                            Tab.SETTINGS -> SettingsScreen()
+                        }
                     }
                 }
             }
         }
-        }
     }
 }
 
-/** 软件背景：自定义图片（设置页可设）或默认纯色 */
+/** 软件背景：自定义图片（按屏幕尺寸裁切）或默认纯色 */
 @Composable
 private fun AppBackground(glass: dev.chrisbanes.haze.HazeState) {
+    val context = LocalContext.current
     val path = ThemePrefs.bgImagePath.value
-    val bitmap = remember(path) {
-        if (path.isNotBlank() && File(path).exists())
-            runCatching { BitmapFactory.decodeFile(path) }.getOrNull()
-        else null
+    val nonce = ThemePrefs.bgNonce.value
+    val crop = ThemePrefs.bgCropMode.value
+    val screen = remember { screenSizePx(context) }
+
+    val bitmap = remember(path, nonce, crop, screen) {
+        if (path.isNotBlank() && File(path).exists()) {
+            runCatching {
+                val src = BitmapFactory.decodeFile(path) ?: return@runCatching null
+                cropToScreen(src, screen.first, screen.second, crop)
+            }.getOrNull()
+        } else null
     }
+
     if (bitmap != null) {
         Image(
             bitmap = bitmap.asImageBitmap(),
@@ -197,10 +244,49 @@ private fun AppBackground(glass: dev.chrisbanes.haze.HazeState) {
     }
 }
 
-/** Tab 便捷映射（首页快捷入口跳转用） */
+/** 读取设备屏幕像素尺寸 */
+private fun screenSizePx(context: Context): Pair<Int, Int> {
+    val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+    val b = wm.currentWindowMetrics.bounds
+    return b.width() to b.height()
+}
+
+/** 按屏幕比例裁切（居中/顶部/底部/适应宽度） */
+private fun cropToScreen(src: Bitmap, sw: Int, sh: Int, mode: ThemePrefs.BgCrop): Bitmap {
+    if (sw <= 0 || sh <= 0) return src
+    val target = sw.toFloat() / sh
+    val srcRatio = src.width.toFloat() / src.height
+    var w = src.width
+    var h = src.height
+    var x = 0
+    var y = 0
+    if (mode == ThemePrefs.BgCrop.FIT_WIDTH) {
+        // 适应宽度铺满，多出的高度从顶部裁掉
+        h = (src.width / target).toInt().coerceAtMost(src.height)
+        w = src.width
+        y = 0
+    } else if (srcRatio > target) {
+        w = (src.height * target).toInt()
+        x = when (mode) {
+            ThemePrefs.BgCrop.TOP -> 0
+            ThemePrefs.BgCrop.BOTTOM -> src.width - w
+            else -> (src.width - w) / 2
+        }
+    } else {
+        h = (src.width / target).toInt()
+        y = when (mode) {
+            ThemePrefs.BgCrop.TOP -> 0
+            ThemePrefs.BgCrop.BOTTOM -> src.height - h
+            else -> (src.height - h) / 2
+        }
+    }
+    return runCatching { Bitmap.createBitmap(src, x, y, w.coerceAtLeast(1), h.coerceAtLeast(1)) }
+        .getOrDefault(src)
+}
+
 private fun homeTabOf(name: String): Tab = when (name) {
-    "pickup" -> Tab.PICKUP
     "schedule" -> Tab.SCHEDULE
+    "pickup" -> Tab.PICKUP
     "bus" -> Tab.BUS
     else -> Tab.SETTINGS
 }

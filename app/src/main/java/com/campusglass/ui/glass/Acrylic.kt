@@ -1,5 +1,6 @@
 package com.campusglass.ui.glass
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -63,8 +64,12 @@ fun AcrylicCard(
 ) {
     val glass = LocalGlass.current
     val customBg = ThemePrefs.bgImagePath.value.isNotBlank()
-    val dark = ThemePrefs.darkMode.value
-    if (glass != null && customBg) {
+    val dark = when (ThemePrefs.themeMode.value) {
+        ThemePrefs.ThemeMode.DARK -> true
+        ThemePrefs.ThemeMode.LIGHT -> false
+        ThemePrefs.ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    }
+    if (glass != null && customBg && ThemePrefs.acrylicEnabled.value) {
         Surface(
             modifier = modifier.acrylic(glass, dark, blurRadius = 22.dp, shape = shape),
             shape = shape,

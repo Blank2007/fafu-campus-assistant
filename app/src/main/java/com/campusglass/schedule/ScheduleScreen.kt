@@ -61,7 +61,7 @@ private val PALETTE = listOf(
 
 /** 一周显示顺序：周日起始 */
 private val DAY_ORDER = listOf(7, 1, 2, 3, 4, 5, 6)
-private fun dayLabel(wd: Int) = "周" + "日一二三四五六"[wd - 1]
+private fun dayLabel(wd: Int) = "周" + "一二三四五六日"[wd - 1]
 
 private data class Slot(var weekday: Int, var start: Int, var end: Int)
 
@@ -107,6 +107,7 @@ fun ScheduleScreen() {
             LazyColumn(contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
                 item {
                     TimetableGrid(courses = courses, week = week, onClick = { detail = it })
+                    HolidayBanner(week)
                 }
             }
             ExtendedFloatingActionButton(
@@ -417,4 +418,44 @@ private fun AddCourseDialog(onDismiss: () -> Unit, onSave: (List<Course>) -> Uni
             TextButton(onClick = onDismiss) { Text("取消") }
         },
     )
+}
+
+/** 本周期间假期标记（周日起算） */
+@Composable
+private fun HolidayBanner(week: Int) {
+    val context = LocalContext.current
+    val weekStart = ScheduleStore.dateOf(context, week, 7)   // 周日
+    val weekEnd = ScheduleStore.dateOf(context, week, 6)     // 周六
+    val hits = HolidayData.holidaysInWeek(weekStart, weekEnd)
+    val today = LocalDate.now()
+    val todayHoliday = HolidayData.holidays.firstOrNull { !today.isBefore(it.start) && !today.isAfter(it.end) }
+    Card(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (hits.isEmpty()) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            else Color(0xFFFFF3D6)
+        ),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            if (hits.isEmpty()) {
+                Text(
+                    "本周无假期标记" + if (todayHoliday != null) "（今天：${todayHoliday.name} 🎉）" else "",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else {
+                Text(
+                    "🏖 本周期间假期：" + hits.joinToString("、"),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    "假期参考（以学校校历为准）" + if (todayHoliday != null) " · 今天：${todayHoliday.name} 🎉" else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
+        }
+    }
 }

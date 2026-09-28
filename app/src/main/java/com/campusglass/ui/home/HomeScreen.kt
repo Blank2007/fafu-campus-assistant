@@ -57,7 +57,7 @@ fun HomeScreen(onGoto: (String) -> Unit) {
                     textAlign = TextAlign.Center,
                 )
                 Text(
-                    "取件码快捷跳转 · 快递查询 · 手动课表 · 南平校区公交",
+                    "课表 · 快递 · 南平校区公交 · 取件码跳转",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                     textAlign = TextAlign.Center,
@@ -66,15 +66,15 @@ fun HomeScreen(onGoto: (String) -> Unit) {
             }
         }
 
-        // 快捷功能
-        item {
-            Button(onClick = { onGoto("pickup") }, modifier = Modifier.fillMaxWidth()) {
-                Text("📦 取件码 · 快递查询")
-            }
-        }
+        // 快捷功能（课表与快递已换位）
         item {
             OutlinedButton(onClick = { onGoto("schedule") }, modifier = Modifier.fillMaxWidth()) {
                 Text("📚 课表 · 手动添加")
+            }
+        }
+        item {
+            Button(onClick = { onGoto("pickup") }, modifier = Modifier.fillMaxWidth()) {
+                Text("📦 快递 · 取件码查询")
             }
         }
         item {

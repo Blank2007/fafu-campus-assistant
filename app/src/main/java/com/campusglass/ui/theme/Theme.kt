@@ -1,5 +1,6 @@
 package com.campusglass.ui.theme
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -26,7 +27,9 @@ private val DarkColors = darkColorScheme(
 )
 
 /**
- * 全局主题：深色模式开关（设置页） + 可选主题色（0=跟随系统动态取色）。
+ * 全局主题：
+ * - 深色三态：跟随系统 / 浅色 / 深色（所有文字/标题颜色随主题切换）
+ * - 主题色：系统动态取色(0) / 7 推荐色(1..7) / 自定义调色盘(8)
  */
 @Composable
 fun CampusGlassTheme(
@@ -34,17 +37,25 @@ fun CampusGlassTheme(
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val dark = ThemePrefs.darkMode.value
+    val dark = when (ThemePrefs.themeMode.value) {
+        ThemePrefs.ThemeMode.DARK -> true
+        ThemePrefs.ThemeMode.LIGHT -> false
+        ThemePrefs.ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    }
     val idx = ThemePrefs.themeColorIndex.value
+    val primary = when {
+        idx == 0 -> null                       // 系统主题色（动态）
+        idx <= ThemePrefs.THEME_COLORS.size -> ThemePrefs.THEME_COLORS[idx - 1].second
+        else -> ThemePrefs.customColor.value   // 自定义
+    }
+
     val colorScheme = when {
-        idx == 0 && dynamicColor ->
+        primary == null && dynamicColor ->
             if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        idx == 0 ->
+        primary == null ->
             if (dark) DarkColors else LightColors
-        dark ->
-            DarkColors.copy(primary = ThemePrefs.THEME_COLORS[idx].second)
-        else ->
-            LightColors.copy(primary = ThemePrefs.THEME_COLORS[idx].second)
+        dark -> DarkColors.copy(primary = primary)
+        else -> LightColors.copy(primary = primary)
     }
     MaterialTheme(colorScheme = colorScheme, content = content)
 }

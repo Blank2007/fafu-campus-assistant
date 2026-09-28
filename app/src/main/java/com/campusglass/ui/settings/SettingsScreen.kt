@@ -15,9 +15,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -32,27 +32,40 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.campusglass.BuildConfig
 import com.campusglass.schedule.PeriodTable
-import com.campusglass.ui.theme.ThemePrefs
+import com.campusglass.schedule.ScheduleStore
 import com.campusglass.ui.glass.AcrylicCard
+import com.campusglass.ui.theme.ThemePrefs
 import com.campusglass.ui.widgets.ScreenHeader
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.time.LocalDate
 
 private data class Credit(val name: String, val author: String, val url: String, val license: String, val usage: String)
 
@@ -63,35 +76,39 @@ private val credits = listOf(
     Credit("支付宝菜鸟小程序取件码", "V2EX 社区实测", "https://v2ex.com/t/1002900", "公开资料 / 合理引用", "取件码直达：alipays 小程序 appId"),
     Credit("建阳公交线路通告", "武夷发展集团·建阳区公交公司（大武夷新闻网）", "https://www.greatwuyi.com/guangg/content/202508/27/c1555764.html", "公开资讯 / 合理引用", "公交数据：103/105/107 路站点与时刻"),
     Credit("无敌电动公交数据", "modiauto.com.cn", "https://www.modiauto.com.cn/cx/bus_142302.html", "公开资讯 / 合理引用", "公交发车时刻核实（2026-08/09）"),
-    Credit("Haze（亚克力模糊）", "Chris Banes", "https://github.com/chrisbanes/haze", "Apache-2.0", "直接依赖：底部悬浮栏亚克力模糊材质"),
+    Credit("Haze（亚克力模糊）", "Chris Banes", "https://github.com/chrisbanes/haze", "Apache-2.0", "直接依赖：亚克力模糊材质"),
     Credit("快递100", "深圳前海百递网络", "https://www.kuaidi100.com", "平台服务（查询接口）", "快递物流轨迹查询接口"),
     Credit("Jetpack Compose / AndroidX", "Google & AOSP", "https://android.googlesource.com/platform/frameworks/support", "Apache-2.0", "直接依赖：Material 3 UI、原生动画"),
     Credit("Kotlin", "JetBrains", "https://github.com/JetBrains/kotlin", "Apache-2.0", "直接依赖：开发语言"),
 )
 
-/** 版本修改日志（精确到分钟） */
 private val changelog = listOf(
-    "v2.17 · 2026-09-28 23:59" to "课表大改版：周日起算、一节一行、第三行显示教师、分段周次（2-5,7-8）、同名课多时段、高对比色块、添加界面重做；节次时间/每天节数可自定义；全局亚克力（仅自定义背景时启用）；底部悬浮栏边距适配圆角与手势条；拼多多只留首页/个人中心",
-    "v2.16 · 2026-09-28 23:35" to "深色模式开关；悬浮亚克力底栏；异形屏全屏背景适配；公交站点竖排；快递多公司兼容并标注支持范围；微信身份码自动进入；背景只留自定义；个性化（课表字号/显示周末）；日志精确到分钟",
+    "v2.18 · 2026-09-29 00:35" to "深色三态（跟随系统/浅色/深色）；课表 bug 修复（周几映射错位/节假日标记找回/学期起始入口）；底栏下拉自动隐藏；检查更新；背景按屏幕尺寸裁切（居中/顶部/底部/适应宽度）并即时刷新；全局亚克力开关；主题色 7 推荐+系统+调色盘自定义；「取件」更名「快递」并与课表换位",
+    "v2.17 · 2026-09-28 23:59" to "课表大改版：周日起算、一节一行、教师行、分段周次、多时段、高对比色块、添加界面重做；节次时间/每天节数自定义；全局亚克力；安全区适配；拼多多入口精简",
+    "v2.16 · 2026-09-28 23:35" to "深色模式开关；悬浮亚克力底栏；异形屏适配；公交站点竖排；快递多公司兼容；微信身份码自动进入；背景只留自定义；个性化；日志精确到分钟",
     "v2.15 · 2026-09-28 23:00" to "路线图改地图截图；首页农大常用网站；设置页（自定义背景/主题色）",
     "v2.14 · 2026-09-28 00:29" to "公交路线图内置；发车时刻分时段排版；保留邮箱仅不公开 QQ 号",
     "v2.13 · 2026-09-28 00:16" to "移除 QQ 号与 QQ 邮箱（隐私）；含 v2.12 全部更新",
-    "v2.12 · 2026-09-27 23:56" to "拼多多身份码微信入口（含驿站点）；课表学期校准（9/28=第五周）；公交时刻核实补齐",
-    "v2.11 · 2026-09-27 00:16" to "快递查询历史记录；关于页新增作者信息与代码归属说明",
+    "v2.12 · 2026-09-27 23:56" to "拼多多身份码微信入口；课表学期校准；公交时刻核实补齐",
+    "v2.11 · 2026-09-27 00:16" to "快递查询历史记录；关于页作者信息与代码归属",
     "v2.10 · 2026-09-27 00:00" to "快递查询 API 直出物流轨迹",
-    "v2.9 · 2026-09-26 23:30" to "快递 App 内显示；读取剪贴板快捷填单号",
-    "v2.8 · 2026-09-26 23:22" to "公交去高德改掌上公交提示；UI 过渡动画；版本日志折叠",
-    "v2.7 · 2026-09-26 23:11" to "关于页精简；电商只留菜鸟/拼多多；快递单号查询上线",
-    "v2.2-v2.6 · 2026-09-26 21:45~23:05" to "底部功能栏/公交时刻筛选/课表手动模式/应用检测权限化等（详见 CHANGELOG.md）",
+    "v2.9 · 2026-09-26 23:30" to "快递 App 内显示；读取剪贴板填单号",
+    "v2.8 · 2026-09-26 23:22" to "公交去高德；UI 过渡动画；版本日志折叠",
+    "v2.7 · 2026-09-26 23:11" to "关于页精简；电商只留菜鸟/拼多多；快递查询上线",
+    "v2.2-v2.6 · 2026-09-26 21:45~23:05" to "底部功能栏/公交筛选/课表手动模式/检测权限化等（详见 CHANGELOG.md）",
     "v1.x-v2.1 · 2026-09-25 23:45 起" to "初版到原生 Material 化（历史版本，详见 CHANGELOG.md）",
 )
 
-/** 设置页：外观 / 个性化 / 关于 / 致谢 / 版本日志 */
+/** 设置页 */
 @Composable
 fun SettingsScreen() {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var expanded by remember { mutableStateOf(false) }
     var showTimeDialog by remember { mutableStateOf(false) }
+    var showColorPicker by remember { mutableStateOf(false) }
+    var updateInfo by remember { mutableStateOf<String?>(null) }
+    var checking by remember { mutableStateOf(false) }
 
     val pickBgImage = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -102,8 +119,8 @@ fun SettingsScreen() {
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     file.outputStream().use { output -> input.copyTo(output) }
                 }
-                ThemePrefs.setBgImage(context, file.absolutePath)
-                Toast.makeText(context, "背景已更换 ✅", Toast.LENGTH_SHORT).show()
+                ThemePrefs.setBgImage(context, file.absolutePath)   // nonce+1，立即刷新
+                Toast.makeText(context, "背景已更换 ✅（可选裁切方式）", Toast.LENGTH_SHORT).show()
             }.onFailure {
                 Toast.makeText(context, "背景设置失败", Toast.LENGTH_SHORT).show()
             }
@@ -118,31 +135,43 @@ fun SettingsScreen() {
     ) {
         item { ScreenHeader("设置") }
 
-        // ---- 深色模式 ----
+        // ---- 主题模式（三态）----
         item {
             AcrylicCard(Modifier.fillMaxWidth()) {
-                Row(
-                    Modifier.padding(18.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("🌙 深色模式", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "开启后全局使用深色配色（当前为可选开关，按需启用）",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("🌙 深色模式", style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ThemePrefs.ThemeMode.entries.forEach { m ->
+                            FilterChip(
+                                selected = ThemePrefs.themeMode.value == m,
+                                onClick = { ThemePrefs.setThemeMode(context, m) },
+                                label = {
+                                    Text(
+                                        when (m) {
+                                            ThemePrefs.ThemeMode.SYSTEM -> "跟随系统"
+                                            ThemePrefs.ThemeMode.LIGHT -> "浅色"
+                                            ThemePrefs.ThemeMode.DARK -> "深色"
+                                        }
+                                    )
+                                },
+                            )
+                        }
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("全局亚克力效果（需自定义背景）", style = MaterialTheme.typography.bodySmall)
+                        Switch(
+                            checked = ThemePrefs.acrylicEnabled.value,
+                            onCheckedChange = { ThemePrefs.setAcrylic(context, it) },
                         )
                     }
-                    Switch(
-                        checked = ThemePrefs.darkMode.value,
-                        onCheckedChange = { ThemePrefs.setDark(context, it) },
-                    )
                 }
             }
         }
 
-        // ---- 背景（只保留自定义）----
+        // ---- 背景 + 裁切 ----
         item {
             AcrylicCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -155,7 +184,7 @@ fun SettingsScreen() {
                                 )
                             },
                             modifier = Modifier.weight(1f),
-                        ) { Text("选择自定义背景图") }
+                        ) { Text("选择背景图") }
                         OutlinedButton(
                             onClick = {
                                 ThemePrefs.setBgImage(context, "")
@@ -164,9 +193,28 @@ fun SettingsScreen() {
                             modifier = Modifier.weight(1f),
                         ) { Text("恢复默认") }
                     }
+                    Text("裁切方式（按屏幕尺寸）", style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ThemePrefs.BgCrop.entries.forEach { c ->
+                            FilterChip(
+                                selected = ThemePrefs.bgCropMode.value == c,
+                                onClick = { ThemePrefs.setBgCrop(context, c) },
+                                label = {
+                                    Text(
+                                        when (c) {
+                                            ThemePrefs.BgCrop.CENTER -> "居中"
+                                            ThemePrefs.BgCrop.TOP -> "顶部"
+                                            ThemePrefs.BgCrop.BOTTOM -> "底部"
+                                            ThemePrefs.BgCrop.FIT_WIDTH -> "适应宽度"
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                },
+                            )
+                        }
+                    }
                     Text(
-                        if (ThemePrefs.bgImagePath.value.isBlank()) "当前：默认背景"
-                        else "当前：自定义图片（裁切铺满全屏，含异形屏）",
+                        "已按当前设备屏幕比例裁切铺满，立即生效。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
@@ -174,33 +222,33 @@ fun SettingsScreen() {
             }
         }
 
-        // ---- 主题色 ----
+        // ---- 主题色：推荐 + 系统 + 调色盘 ----
         item {
             AcrylicCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("🎯 主题色", style = MaterialTheme.typography.titleMedium)
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        // 系统主题色（动态取色）
+                        ColorDot(
+                            color = MaterialTheme.colorScheme.primary,
+                            label = "系统",
+                            selected = ThemePrefs.themeColorIndex.value == 0,
+                        ) { ThemePrefs.setColorIndex(context, 0) }
+                        // 7 推荐色
                         ThemePrefs.THEME_COLORS.forEachIndexed { i, (label, color) ->
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.clickable { ThemePrefs.setColor(context, i) },
-                            ) {
-                                Box(
-                                    Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(color)
-                                )
-                                Text(
-                                    label,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = if (ThemePrefs.themeColorIndex.value == i) FontWeight.Bold
-                                    else FontWeight.Normal,
-                                )
-                            }
+                            ColorDot(
+                                color = color,
+                                label = label,
+                                selected = ThemePrefs.themeColorIndex.value == i + 1,
+                            ) { ThemePrefs.setColorIndex(context, i + 1) }
+                    }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { showColorPicker = true }) {
+                            Text("🎨 调色盘自定义" + if (ThemePrefs.themeColorIndex.value == 8) "（当前生效）" else "")
                         }
                     }
                 }
@@ -235,17 +283,12 @@ fun SettingsScreen() {
                     OutlinedButton(
                         onClick = { showTimeDialog = true },
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("⏰ 节次时间设置 / 每天上课节数") }
-                    Text(
-                        "更多个性化持续增加中（欢迎提建议）",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    )
+                    ) { Text("⏰ 节次时间设置 / 每天上课节数 / 学期起始日") }
                 }
             }
         }
 
-        // ---- 关于本项目 ----
+        // ---- 关于 + 检查更新 ----
         item {
             AcrylicCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -259,9 +302,28 @@ fun SettingsScreen() {
                     )
                     Text(
                         "全部代码由 AI 助手（Mimo v2.6 / OpenClaw 编程助手）独立编写；" +
-                            "需求设计、功能构想、提示词与测试反馈由 Void_Blank 提供。人出想法，AI 写代码。",
+                            "需求设计、提示词与测试反馈由 Void_Blank 提供。人出想法，AI 写代码。",
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    Button(
+                        onClick = {
+                            checking = true
+                            scope.launch {
+                                val msg = withContext(Dispatchers.IO) { checkUpdate() }
+                                updateInfo = msg
+                                checking = false
+                            }
+                        },
+                        enabled = !checking,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (checking) "正在检查更新…" else "🔄 检查更新") }
+                    TextButton(onClick = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Blank2007/fafu-campus-assistant/releases"))
+                            )
+                        }
+                    }) { Text("打开下载页（GitHub Releases）") }
                 }
             }
         }
@@ -273,13 +335,6 @@ fun SettingsScreen() {
                     Text("📮 联系 · 交流 · 反馈", style = MaterialTheme.typography.titleMedium)
                     Text("GitHub：Void_Blank（Blank2007）", style = MaterialTheme.typography.bodyMedium)
                     Text("邮箱：1553008865@qq.com", style = MaterialTheme.typography.bodyMedium)
-                    OutlinedButton(onClick = {
-                        runCatching {
-                            context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Blank2007/fafu-campus-assistant"))
-                            )
-                        }
-                    }) { Text("开源仓库：Blank2007/fafu-campus-assistant") }
                     Text(
                         "非常欢迎交流与反馈！不管是发现 Bug、想要新功能，还是想聊聊实现，" +
                             "都欢迎通过 GitHub 或邮件找我。你的每条建议都可能出现在下一个版本里 🚀",
@@ -297,11 +352,8 @@ fun SettingsScreen() {
                 changelog.first().let { (ver, desc) ->
                     AcrylicCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                "$ver（当前版本）",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
+                            Text("$ver（当前版本）", style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary)
                             Text(desc, style = MaterialTheme.typography.bodySmall)
                         }
                     }
@@ -342,44 +394,116 @@ fun SettingsScreen() {
                 }
             }
         }
-
-        item {
-            AcrylicCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("致谢声明（详细）", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        "1. 直接依赖：Haze、Jetpack Compose / AndroidX、Kotlin —— 各自许可证见上表，分发时保留原始许可证与署名。\n\n" +
-                            "2. 间接参考：WakeUp 课程表、ling_QuickShortcut 等 —— 仅借鉴公开思路，未复制源码，著作权归原作者所有。\n\n" +
-                            "3. 公开资料与数据：公交数据引自建阳公交官方通告与无敌电动公开数据；快递轨迹由快递100 提供查询接口；" +
-                            "拼多多/支付宝跳转路径引自社区公开资料。\n\n" +
-                            "4. 本项目免费开源，仅供学习交流使用。",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-        }
     }
 
     if (showTimeDialog) {
         PeriodTimesDialog(onDismiss = { showTimeDialog = false })
     }
+    if (showColorPicker) {
+        ColorPickerDialog(onDismiss = { showColorPicker = false })
+    }
+    updateInfo?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { updateInfo = null },
+            title = { Text("检查更新") },
+            text = { Text(msg) },
+            confirmButton = {
+                TextButton(onClick = {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Blank2007/fafu-campus-assistant/releases"))
+                        )
+                    }
+                }) { Text("去下载") }
+            },
+            dismissButton = {
+                TextButton(onClick = { updateInfo = null }) { Text("关闭") }
+            },
+        )
+    }
 }
 
-/** 节次时间设置：每节上课/结束时间可改 + 每天节数自定义 */
+@Composable
+private fun ColorDot(color: Color, label: String, selected: Boolean, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
+        Box(
+            Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+        )
+    }
+}
+
+/** 调色盘：RGB 滑杆自定义主题色 */
+@Composable
+private fun ColorPickerDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val base = ThemePrefs.customColor.value
+    var r by remember { mutableFloatStateOf(base.red * 255f) }
+    var g by remember { mutableFloatStateOf(base.green * 255f) }
+    var b by remember { mutableFloatStateOf(base.blue * 255f) }
+    val preview = Color((r.toInt() shl 16) or (g.toInt() shl 8) or b.toInt())
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("🎨 调色盘") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(64.dp)
+                        .clip(CircleShape)
+                        .background(preview)
+                )
+                Text("红 ${r.toInt()}", style = MaterialTheme.typography.labelSmall)
+                Slider(value = r, onValueChange = { r = it }, valueRange = 0f..255f)
+                Text("绿 ${g.toInt()}", style = MaterialTheme.typography.labelSmall)
+                Slider(value = g, onValueChange = { g = it }, valueRange = 0f..255f)
+                Text("蓝 ${b.toInt()}", style = MaterialTheme.typography.labelSmall)
+                Slider(value = b, onValueChange = { b = it }, valueRange = 0f..255f)
+                Text(
+                    "预览色：#" + preview.toArgb().toUInt().toString(16).uppercase().takeLast(6),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                ThemePrefs.setCustomColor(context, preview)
+                onDismiss()
+            }) { Text("使用此色") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
+}
+
+/** 节次时间 / 每天节数 / 学期起始日 */
 @Composable
 private fun PeriodTimesDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val times = remember { mutableStateOf(PeriodTable.all(context)) }
-    val perDay by remember { mutableIntStateOf(PeriodTable.periodsPerDay(context)) }
-    var perDayState by remember { mutableIntStateOf(perDay) }
+    var perDayState by remember { mutableIntStateOf(PeriodTable.periodsPerDay(context)) }
+    var termStartText by remember { mutableStateOf(ScheduleStore.termStart(context).toString()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("⏰ 节次时间设置") },
+        title = { Text("⏰ 节次与学期设置") },
         text = {
             Column(
                 Modifier
-                    .height(440.dp)
+                    .height(460.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -393,6 +517,11 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
                         )
                     }
                 }
+                OutlinedTextField(
+                    termStartText, { termStartText = it },
+                    Modifier.fillMaxWidth(), singleLine = true,
+                    label = { Text("学期起始日（第一周的周日，如 2026-08-30）") },
+                )
                 HorizontalDivider()
                 times.value.forEachIndexed { i, t ->
                     val start = remember(t) { mutableStateOf(t.substringBefore("-")) }
@@ -415,6 +544,7 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
             Button(onClick = {
                 PeriodTable.save(context, times.value)
                 PeriodTable.setPeriodsPerDay(context, perDayState)
+                runCatching { ScheduleStore.setTermStart(context, LocalDate.parse(termStartText)) }
                 onDismiss()
             }) { Text("保存") }
         },
@@ -423,3 +553,20 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
         },
     )
 }
+
+/** 检查更新：读 GitHub Releases 最新版 */
+private fun checkUpdate(): String = runCatching {
+    val conn = URL("https://api.github.com/repos/Blank2007/fafu-campus-assistant/releases/latest")
+        .openConnection() as HttpURLConnection
+    conn.connectTimeout = 8000
+    conn.readTimeout = 8000
+    conn.setRequestProperty("Accept", "application/vnd.github+json")
+    val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+    val latest = json.optString("tag_name", "").removePrefix("v")
+    val current = BuildConfig.VERSION_NAME
+    when {
+        latest.isBlank() -> "没获取到版本信息，请稍后再试"
+        latest == current -> "已是最新版本（v$current）✅"
+        else -> "发现新版本 v$latest（当前 v$current）！点「去下载」更新"
+    }
+}.getOrElse { "检查失败：" + (it.message ?: "网络异常") }
