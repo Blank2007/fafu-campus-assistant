@@ -9,39 +9,67 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
-/** 一门课（同一门课多个时段拆成多条） */
+/** 一门课（同一门课多个时段拆成多条，同名即同一门课） */
 data class Course(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val teacher: String = "",
     val location: String = "",
-    val weekday: Int,          // 1=周一 ... 7=周日
+    val weekday: Int,          // 1=周一 ... 6=周六 7=周日（周为起始日）
     val startPeriod: Int,
     val endPeriod: Int,
-    val weeks: Set<Int>,
+    val weeks: Set<Int>,       // 支持 2-5,7-8 这类分段周次
 )
 
-/** 节次作息（南平/金山校区常规作息） */
+/**
+ * 节次作息（可在设置里逐节修改上课/结束时间；每天节数可自定义）。
+ * 默认作息：福建农林大学金山/南平校区常规。
+ */
 object PeriodTable {
-    val times: List<Pair<LocalTime, LocalTime>> = listOf(
-        LocalTime.of(8, 0) to LocalTime.of(8, 45),
-        LocalTime.of(8, 55) to LocalTime.of(9, 40),
-        LocalTime.of(10, 0) to LocalTime.of(10, 45),
-        LocalTime.of(10, 55) to LocalTime.of(11, 40),
-        LocalTime.of(14, 0) to LocalTime.of(14, 45),
-        LocalTime.of(14, 55) to LocalTime.of(15, 40),
-        LocalTime.of(16, 0) to LocalTime.of(16, 45),
-        LocalTime.of(16, 55) to LocalTime.of(17, 40),
-        LocalTime.of(19, 0) to LocalTime.of(19, 45),
-        LocalTime.of(19, 55) to LocalTime.of(20, 40),
-        LocalTime.of(20, 50) to LocalTime.of(21, 35),
+
+    private val DEFAULT_TIMES = listOf(
+        "08:00-08:45", "08:55-09:40", "10:00-10:45", "10:55-11:40",
+        "14:00-14:45", "14:55-15:40", "16:00-16:45", "16:55-17:40",
+        "19:00-19:45", "19:55-20:40", "20:50-21:35",
     )
 
-    fun start(p: Int) = times[(p - 1).coerceIn(0, times.size - 1)].first
-    fun end(p: Int) = times[(p - 1).coerceIn(0, times.size - 1)].second
+    private fun prefs(c: Context) = c.getSharedPreferences("schedule", Context.MODE_PRIVATE)
+
+    /** 返回每节 "HH:mm-HH:mm"（用户可改） */
+    fun all(c: Context): List<String> {
+        val saved = prefs(c).getString("periodTimes", null)
+        val list = saved?.split(",")?.filter { it.contains("-") } ?: emptyList()
+        return (list + DEFAULT_TIMES).take(DEFAULT_TIMES.size)
+    }
+
+    fun save(c: Context, times: List<String>) {
+        prefs(c).edit().putString("periodTimes", times.take(DEFAULT_TIMES.size).joinToString(",")).apply()
+    }
+
+    fun startStr(c: Context, p: Int): String =
+        all(c)[(p - 1).coerceIn(0, DEFAULT_TIMES.size - 1)].substringBefore("-")
+
+    fun endStr(c: Context, p: Int): String =
+        all(c)[(p - 1).coerceIn(0, DEFAULT_TIMES.size - 1)].substringAfter("-")
+
+    /** 每天节数（自定义一天上几节课） */
+    fun periodsPerDay(c: Context): Int = prefs(c).getInt("periodsPerDay", 11).coerceIn(4, DEFAULT_TIMES.size)
+
+    fun setPeriodsPerDay(c: Context, n: Int) {
+        prefs(c).edit().putInt("periodsPerDay", n.coerceIn(4, DEFAULT_TIMES.size)).apply()
+    }
+
+    /** 由开始时间反查最接近的节次（ICS 备用） */
+    fun periodOfTime(c: Context, t: LocalTime): Int {
+        val times = all(c).map {
+            LocalTime.parse(it.substringBefore("-")) to LocalTime.parse(it.substringAfter("-"))
+        }
+        return times.indexOfFirst { !it.first.isAfter(t) && !it.second.isBefore(t) }
+            .let { if (it >= 0) it + 1 else 1 }
+    }
 }
 
-/** 课表本地存储 */
+/** 课表本地存储（周从【周日】起算） */
 object ScheduleStore {
     private val DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     private fun prefs(c: Context) = c.getSharedPreferences("schedule", Context.MODE_PRIVATE)
@@ -58,8 +86,7 @@ object ScheduleStore {
                 weekday = o.getInt("weekday"),
                 startPeriod = o.getInt("start"),
                 endPeriod = o.getInt("end"),
-                weeks = o.getString("weeks").split(",").filter { it.isNotBlank() }
-                    .mapNotNull { it.toIntOrNull() }.toSet(),
+                weeks = parseWeeks(o.optString("weeks")),
             )
         }
     }.getOrDefault(emptyList())
@@ -78,10 +105,10 @@ object ScheduleStore {
         prefs(c).edit().putString("courses", arr.toString()).apply()
     }
 
-    /** 学期第一周周一 */
+    /** 学期第一周的【周日】；9/28（周一）= 第五周 ⇒ 第一周周日 = 2026-08-30 */
     fun termStart(c: Context): LocalDate = runCatching {
-        LocalDate.parse(prefs(c).getString("termStart", "2026-08-31"), DATE_FMT)
-    }.getOrDefault(LocalDate.of(2026, 8, 31))   // 2026-09-28 为第 5 周周一
+        LocalDate.parse(prefs(c).getString("termStart", "2026-08-30"), DATE_FMT)
+    }.getOrDefault(LocalDate.of(2026, 8, 30))
 
     fun setTermStart(c: Context, date: LocalDate) {
         prefs(c).edit().putString("termStart", date.format(DATE_FMT)).apply()
@@ -92,14 +119,15 @@ object ScheduleStore {
         return (days / 7 + 1).toInt().coerceAtLeast(1)
     }
 
+    /** 第 w 周的周 x 对应日期（weekday: 1=周一 ... 7=周日；周日为一周起点） */
+    fun dateOf(c: Context, week: Int, weekday: Int): LocalDate =
+        termStart(c).plusDays(((week - 1) * 7 + (weekday % 7)).toLong())
+
     fun weekdayOf(date: LocalDate): Int = date.dayOfWeek.value   // 1=周一 ... 7=周日
 
-    /** 第 w 周的周 x 对应日期 */
-    fun dateOf(c: Context, week: Int, weekday: Int): LocalDate =
-        termStart(c).plusDays(((week - 1) * 7 + (weekday - 1)).toLong())
-
-    /** 解析周次文本：支持 "1-16" / "1-8,10" / "1-16周(单)" */
+    /** 周次解析：支持 "2-5,7-8"、"1-16周(单)"、"3,5" */
     fun parseWeeks(raw: String): Set<Int> {
+        if (raw.isBlank()) return emptySet()
         val single = raw.contains("单")
         val even = raw.contains("双")
         val base = raw.removeSuffix("周")

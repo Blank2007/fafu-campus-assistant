@@ -15,9 +15,15 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsBus
@@ -33,6 +39,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import com.campusglass.bus.BusScreen
 import com.campusglass.pickup.PickupScreen
 import com.campusglass.schedule.ScheduleScreen
+import com.campusglass.ui.glass.LocalGlass
 import com.campusglass.ui.glass.acrylic
 import com.campusglass.ui.glass.glassBackground
 import com.campusglass.ui.glass.rememberGlassState
@@ -96,6 +104,7 @@ fun CampusGlassApp() {
         // 背景铺满整个窗口（含异形屏安全区之外）
         AppBackground(glass)
 
+        CompositionLocalProvider(LocalGlass provides glass) {
         Scaffold(
             containerColor = Color.Transparent,
             contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
@@ -104,7 +113,8 @@ fun CampusGlassApp() {
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
+                        .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
+                        .padding(start = 18.dp, end = 18.dp, bottom = 10.dp),
                     contentAlignment = Alignment.BottomCenter,
                 ) {
                     NavigationBar(
@@ -132,6 +142,7 @@ fun CampusGlassApp() {
             Box(
                 Modifier
                     .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))
                     .padding(padding)
             ) {
                 AnimatedContent(
@@ -153,6 +164,7 @@ fun CampusGlassApp() {
                     }
                 }
             }
+        }
         }
     }
 }

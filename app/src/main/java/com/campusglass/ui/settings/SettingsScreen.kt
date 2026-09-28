@@ -17,20 +17,28 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -40,7 +48,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.campusglass.BuildConfig
+import com.campusglass.schedule.PeriodTable
 import com.campusglass.ui.theme.ThemePrefs
+import com.campusglass.ui.glass.AcrylicCard
 import com.campusglass.ui.widgets.ScreenHeader
 import java.io.File
 
@@ -61,6 +71,7 @@ private val credits = listOf(
 
 /** 版本修改日志（精确到分钟） */
 private val changelog = listOf(
+    "v2.17 · 2026-09-28 23:59" to "课表大改版：周日起算、一节一行、第三行显示教师、分段周次（2-5,7-8）、同名课多时段、高对比色块、添加界面重做；节次时间/每天节数可自定义；全局亚克力（仅自定义背景时启用）；底部悬浮栏边距适配圆角与手势条；拼多多只留首页/个人中心",
     "v2.16 · 2026-09-28 23:35" to "深色模式开关；悬浮亚克力底栏；异形屏全屏背景适配；公交站点竖排；快递多公司兼容并标注支持范围；微信身份码自动进入；背景只留自定义；个性化（课表字号/显示周末）；日志精确到分钟",
     "v2.15 · 2026-09-28 23:00" to "路线图改地图截图；首页农大常用网站；设置页（自定义背景/主题色）",
     "v2.14 · 2026-09-28 00:29" to "公交路线图内置；发车时刻分时段排版；保留邮箱仅不公开 QQ 号",
@@ -80,6 +91,7 @@ private val changelog = listOf(
 fun SettingsScreen() {
     val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
+    var showTimeDialog by remember { mutableStateOf(false) }
 
     val pickBgImage = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -108,7 +120,7 @@ fun SettingsScreen() {
 
         // ---- 深色模式 ----
         item {
-            Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
+            AcrylicCard(Modifier.fillMaxWidth()) {
                 Row(
                     Modifier.padding(18.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -132,7 +144,7 @@ fun SettingsScreen() {
 
         // ---- 背景（只保留自定义）----
         item {
-            Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
+            AcrylicCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("🎨 软件背景", style = MaterialTheme.typography.titleMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -164,7 +176,7 @@ fun SettingsScreen() {
 
         // ---- 主题色 ----
         item {
-            Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
+            AcrylicCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("🎯 主题色", style = MaterialTheme.typography.titleMedium)
                     Row(
@@ -197,7 +209,7 @@ fun SettingsScreen() {
 
         // ---- 个性化 ----
         item {
-            Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
+            AcrylicCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("⚙️ 个性化", style = MaterialTheme.typography.titleMedium)
                     Text("课表字号", style = MaterialTheme.typography.bodySmall)
@@ -220,6 +232,10 @@ fun SettingsScreen() {
                             onCheckedChange = { ThemePrefs.setShowWeekend(context, it) },
                         )
                     }
+                    OutlinedButton(
+                        onClick = { showTimeDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("⏰ 节次时间设置 / 每天上课节数") }
                     Text(
                         "更多个性化持续增加中（欢迎提建议）",
                         style = MaterialTheme.typography.labelSmall,
@@ -231,7 +247,7 @@ fun SettingsScreen() {
 
         // ---- 关于本项目 ----
         item {
-            Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
+            AcrylicCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         "校园助手-FAFUer专用 v${BuildConfig.VERSION_NAME}",
@@ -252,7 +268,7 @@ fun SettingsScreen() {
 
         // ---- 联系 ----
         item {
-            Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
+            AcrylicCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("📮 联系 · 交流 · 反馈", style = MaterialTheme.typography.titleMedium)
                     Text("GitHub：Void_Blank（Blank2007）", style = MaterialTheme.typography.bodyMedium)
@@ -279,7 +295,7 @@ fun SettingsScreen() {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("📋 版本修改日志", style = MaterialTheme.typography.titleMedium)
                 changelog.first().let { (ver, desc) ->
-                    Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
+                    AcrylicCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
                                 "$ver（当前版本）",
@@ -296,7 +312,7 @@ fun SettingsScreen() {
                 AnimatedVisibility(visible = expanded) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         changelog.drop(1).forEach { (ver, desc) ->
-                            Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(1.dp)) {
+                            AcrylicCard(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text(ver, style = MaterialTheme.typography.titleSmall)
                                     Text(desc, style = MaterialTheme.typography.bodySmall)
@@ -313,7 +329,7 @@ fun SettingsScreen() {
             Text("🙏 致谢（借用 / 参考的开源项目与数据来源）", style = MaterialTheme.typography.titleMedium)
         }
         items(credits) { c ->
-            Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(1.dp)) {
+            AcrylicCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(c.name, style = MaterialTheme.typography.titleSmall)
                     Text("作者：${c.author} · 许可：${c.license}", style = MaterialTheme.typography.bodySmall)
@@ -328,7 +344,7 @@ fun SettingsScreen() {
         }
 
         item {
-            Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(1.dp)) {
+            AcrylicCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("致谢声明（详细）", style = MaterialTheme.typography.titleSmall)
                     Text(
@@ -343,4 +359,67 @@ fun SettingsScreen() {
             }
         }
     }
+
+    if (showTimeDialog) {
+        PeriodTimesDialog(onDismiss = { showTimeDialog = false })
+    }
+}
+
+/** 节次时间设置：每节上课/结束时间可改 + 每天节数自定义 */
+@Composable
+private fun PeriodTimesDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val times = remember { mutableStateOf(PeriodTable.all(context)) }
+    val perDay by remember { mutableIntStateOf(PeriodTable.periodsPerDay(context)) }
+    var perDayState by remember { mutableIntStateOf(perDay) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("⏰ 节次时间设置") },
+        text = {
+            Column(
+                Modifier
+                    .height(440.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("每天上课节数", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    (4..11).forEach { n ->
+                        FilterChip(
+                            selected = perDayState == n,
+                            onClick = { perDayState = n },
+                            label = { Text("$n") },
+                        )
+                    }
+                }
+                HorizontalDivider()
+                times.value.forEachIndexed { i, t ->
+                    val start = remember(t) { mutableStateOf(t.substringBefore("-")) }
+                    val end = remember(t) { mutableStateOf(t.substringAfter("-")) }
+                    Text("第${i + 1}节", style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(start.value, { v: String ->
+                            start.value = v
+                            times.value = times.value.toMutableList().also { it[i] = "${start.value}-${end.value}" }
+                        }, Modifier.weight(1f), singleLine = true, label = { Text("上课") })
+                        OutlinedTextField(end.value, { v: String ->
+                            end.value = v
+                            times.value = times.value.toMutableList().also { it[i] = "${start.value}-${end.value}" }
+                        }, Modifier.weight(1f), singleLine = true, label = { Text("下课") })
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                PeriodTable.save(context, times.value)
+                PeriodTable.setPeriodsPerDay(context, perDayState)
+                onDismiss()
+            }) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
 }

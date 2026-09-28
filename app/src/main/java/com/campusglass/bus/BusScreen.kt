@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.campusglass.ui.glass.AcrylicCard
 import com.campusglass.ui.widgets.ScreenHeader
 
 /**
@@ -71,11 +72,10 @@ fun BusScreen() {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             items(shown) { route ->
-                Card(
+                AcrylicCard(
                     Modifier
                         .fillMaxWidth()
                         .clickable { detail = route },
-                    elevation = CardDefaults.cardElevation(2.dp),
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(route.name, style = MaterialTheme.typography.titleMedium)

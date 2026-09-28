@@ -1,12 +1,9 @@
 package com.campusglass.pickup
 
-import android.annotation.SuppressLint
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,14 +14,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -38,16 +32,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import com.campusglass.ui.glass.AcrylicCard
 import com.campusglass.ui.widgets.ScreenHeader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 取件页：① 支付宝·菜鸟 ② 拼多多身份码（自动进入） ③ 快递单号查询（API 直出 + 历史）。
+ * 取件页：① 支付宝·菜鸟 ② 拼多多（首页/个人中心） ③ 快递单号查询。
  */
 @Composable
 fun PickupScreen() {
@@ -61,7 +53,6 @@ fun PickupScreen() {
     var history by remember {
         mutableStateOf(prefs.getStringSet("history", emptySet())?.toList().orEmpty())
     }
-    var showWxDialog by remember { mutableStateOf(false) }
 
     fun doQuery(nu: String) {
         if (nu.isBlank()) {
@@ -89,7 +80,7 @@ fun PickupScreen() {
 
         // ---- ① 支付宝 · 菜鸟 ----
         item {
-            Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
+            AcrylicCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("① 菜鸟取件码 · 支付宝", style = MaterialTheme.typography.titleLarge)
                     Text(
@@ -116,53 +107,34 @@ fun PickupScreen() {
             }
         }
 
-        // ---- ② 拼多多身份码（自动进入）----
+        // ---- ② 拼多多（首页 / 个人中心）----
         item {
-            Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
+            AcrylicCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("② 拼多多 · 身份码/包裹页", style = MaterialTheme.typography.titleLarge)
+                    Text("② 拼多多", style = MaterialTheme.typography.titleLarge)
                     Text(
-                        "一键自动进入（App 内直接打开身份码/包裹页，无需手动操作）；" +
-                            "失败时可选复制链接去微信打开。",
+                        "身份码路径：个人中心 → 多多买菜 → 自提服务 → 我的身份码\n" +
+                            "（K 开头取件码 = 亮身份码扫码出库）",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     )
-                    Button(
-                        onClick = { showWxDialog = true },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("🚀 自动进入身份码页（推荐）") }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = { AppJump.openPddWeChatPackage(context) },
+                        Button(
+                            onClick = { AppJump.openPddHome(context) },
                             modifier = Modifier.weight(1f),
-                        ) { Text("复制链接去微信") }
-                        OutlinedButton(
-                            onClick = { AppJump.openPddWeChatInBrowser(context) },
-                            modifier = Modifier.weight(1f),
-                        ) { Text("浏览器打开") }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
+                        ) { Text("拼多多首页") }
+                        Button(
                             onClick = { AppJump.openPddPersonal(context) },
                             modifier = Modifier.weight(1f),
                         ) { Text("拼多多个人中心") }
-                        OutlinedButton(
-                            onClick = { PddLauncher.openApp(context, AppJump.PDD_PKG) },
-                            modifier = Modifier.weight(1f),
-                        ) { Text("仅打开拼多多") }
                     }
-                    Text(
-                        "身份码路径备忘：个人中心 → 多多买菜 → 自提服务 → 我的身份码（K 开头取件码 = 亮身份码扫码出库）",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                    )
                 }
             }
         }
 
         // ---- ③ 快递单号查询 ----
         item {
-            Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
+            AcrylicCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("③ 快递单号查询", style = MaterialTheme.typography.titleLarge)
                     OutlinedTextField(
@@ -200,7 +172,6 @@ fun PickupScreen() {
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
 
-                    // 历史记录
                     if (history.isNotEmpty()) {
                         Row(
                             Modifier.fillMaxWidth(),
@@ -265,58 +236,6 @@ fun PickupScreen() {
                         }
                     }
                 }
-            }
-        }
-    }
-
-    if (showWxDialog) {
-        WeChatPackageDialog(onDismiss = { showWxDialog = false })
-    }
-}
-
-/**
- * 微信身份码自动进入：App 内嵌浏览器以微信 UA 打开 OAuth 链接，
- * 自动走完微信授权 → 拼多多驿站包裹/身份码页，无需用户手动粘贴。
- */
-@SuppressLint("SetJavaScriptEnabled")
-@Composable
-private fun WeChatPackageDialog(onDismiss: () -> Unit) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        val webViewRef = remember { mutableStateOf<WebView?>(null) }
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(Modifier.fillMaxSize()) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        "拼多多身份码 · 自动进入",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = { webViewRef.value?.reload() }) { Text("刷新") }
-                    TextButton(onClick = onDismiss) { Text("关闭") }
-                }
-                AndroidView(
-                    modifier = Modifier.fillMaxSize(),
-                    factory = { ctx ->
-                        WebView(ctx).apply {
-                            settings.javaScriptEnabled = true
-                            settings.domStorageEnabled = true
-                            settings.userAgentString =
-                                "Mozilla/5.0 (Linux; Android 12; Mobile) MicroMessenger/8.0.42.2460(0x28002A35) " +
-                                    "WeChat/arm64 NetType/WIFI Language/zh_CN"
-                            webViewClient = WebViewClient()
-                            loadUrl(AppJump.PDD_WECHAT_PACKAGE_URL)
-                            webViewRef.value = this
-                        }
-                    },
-                )
             }
         }
     }

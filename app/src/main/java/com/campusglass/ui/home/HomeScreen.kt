@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.campusglass.ui.glass.AcrylicCard
 import com.campusglass.ui.widgets.ScreenHeader
 
 /** 农大常用网站（已核实可访问） */
@@ -89,7 +90,7 @@ fun HomeScreen(onGoto: (String) -> Unit) {
 
         // ---- 农大资讯 / 常用网站 ----
         item {
-            Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
+            AcrylicCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("🏫 农大资讯 · 常用网站", style = MaterialTheme.typography.titleMedium)
                     schoolSites.forEach { (name, url) ->

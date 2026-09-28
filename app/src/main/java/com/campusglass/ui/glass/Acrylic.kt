@@ -1,8 +1,11 @@
 package com.campusglass.ui.glass
 
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -19,9 +22,12 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 
 /**
- * 亚克力（Acrylic）模糊材质 —— 底部悬浮栏用。
- * 背景模糊来自开源库 Haze（Chris Banes，Apache-2.0）。
+ * 亚克力（Acrylic）材质体系。
+ * - 有自定义背景图时：全局卡片/栏位使用亚克力模糊（看得见背后图片）
+ * - 无自定义背景（默认纯色）：自动退回普通不透明卡片（默认不用亚克力）
  */
+
+val LocalGlass = staticCompositionLocalOf<HazeState?> { null }
 
 @Composable
 fun rememberGlassState(): HazeState = rememberHazeState()
@@ -29,7 +35,7 @@ fun rememberGlassState(): HazeState = rememberHazeState()
 /** 标记"玻璃背后的背景层" */
 fun Modifier.glassBackground(state: HazeState): Modifier = this.hazeSource(state)
 
-/** 亚克力模糊修饰符：模糊 + 半透明着色 */
+/** 亚克力模糊修饰符 */
 fun Modifier.acrylic(
     state: HazeState,
     dark: Boolean,
@@ -46,4 +52,30 @@ fun Modifier.acrylic(
     return this
         .clip(shape)
         .hazeBlur(HazeInput.Backdrop(state), style)
+}
+
+/** 全局卡片：有自定义背景时亚克力，否则普通卡片 */
+@Composable
+fun AcrylicCard(
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(20.dp),
+    content: @Composable () -> Unit,
+) {
+    val glass = LocalGlass.current
+    val customBg = ThemePrefs.bgImagePath.value.isNotBlank()
+    val dark = ThemePrefs.darkMode.value
+    if (glass != null && customBg) {
+        Surface(
+            modifier = modifier.acrylic(glass, dark, blurRadius = 22.dp, shape = shape),
+            shape = shape,
+            color = Color.Transparent,
+            content = content,
+        )
+    } else {
+        Card(
+            modifier = modifier,
+            shape = shape,
+            elevation = CardDefaults.cardElevation(2.dp),
+        ) { content() }
+    }
 }
