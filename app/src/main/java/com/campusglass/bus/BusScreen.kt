@@ -2,7 +2,6 @@ package com.campusglass.bus
 
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -33,13 +32,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.campusglass.ui.widgets.ScreenHeader
 
@@ -125,14 +121,6 @@ fun BusScreen() {
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    // 路线图（站点链路图）
-                    if (route.imageRes != 0) {
-                        Image(
-                            painter = painterResource(route.imageRes),
-                            contentDescription = "路线图",
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
                     Text(route.endpoints, style = MaterialTheme.typography.bodyMedium)
                     Text(
                         "首班 ${route.firstDeparture} · 末班 ${route.lastDeparture} · ${route.fare}",
@@ -216,23 +204,27 @@ private fun TimeGrid(times: List<String>) {
     }
 }
 
+/** 站点列表：一行一个站点（校区站高亮） */
 @Composable
 private fun StopsLine(label: String, stops: List<String>) {
     if (stops.isEmpty()) return
     Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-    Text(
-        buildAnnotatedString {
-            stops.forEachIndexed { i, s ->
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        stops.forEachIndexed { i, s ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 if (s == BusData.CAMPUS_STOP) {
-                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)) {
-                        append("【$s】")
-                    }
+                    Text("★ ", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    Text(s, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 } else {
-                    append(s)
+                    Text("   $s", style = MaterialTheme.typography.bodySmall)
                 }
-                if (i != stops.size - 1) append(" → ")
             }
-        },
-        style = MaterialTheme.typography.bodySmall,
-    )
+            if (i != stops.size - 1) {
+                Text("   ↓", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f))
+            }
+        }
+    }
 }

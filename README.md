@@ -1,7 +1,8 @@
 # 校园助手-FAFUer专用 🎒
 
-> 一个人 + AI 协作完成的 Android 开源项目
-> **全部代码由 AI 助手（Mimo v2.6 / OpenClaw 编程助手）独立编写**，需求设计、提示词（Prompt）与测试反馈由 **Void_Blank** 提供。
+> 🗓 **本项目全程在 AI 助手的 3 小时免费时长内完成开发**（需求 → 设计 → 开发 → 多轮迭代 → 开源发布，均为这 3 小时内对话完成）
+>
+> 全部代码由 AI 助手（Mimo v2.6 / OpenClaw 编程助手）独立编写，需求设计、提示词（Prompt）与测试反馈由 **Void_Blank** 提供。
 
 **系统要求**：Android 15+（兼容 Android 12~17，优先适配小米澎湃 OS 4）· 安装包约 2MB · 原生 Material Design 3
 

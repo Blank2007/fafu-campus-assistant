@@ -13,8 +13,8 @@ android {
         // 目标环境 Android 15+（HyperOS 4 / Android 17 优先适配），minSdk 31 兼容更广
         minSdk = 31
         targetSdk = 37
-        versionCode = 35
-        versionName = "2.15"
+        versionCode = 36
+        versionName = "2.16"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -74,9 +74,10 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.10.2")
 
     // 说明：
-    // - 液态玻璃 Haze 库已按“原生安卓界面、不要花哨”需求移除
-    // - 课表模块（含 ML Kit 中文 OCR、WebView 教务抓取）已按需求暂时下线，
-    //   源码保留在 parked/schedule/，需要时移回 src 并恢复下方两行依赖即可：
-    // implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
-    // implementation("androidx.webkit:webkit:1.14.0")
+    // - 课表模块的手动模式已上线（ML Kit OCR / WebView 教务抓取源码保留在 parked/schedule）
+
+    // ---- 亚克力模糊（底部悬浮栏）----
+    // chrisbanes/haze, Apache-2.0, https://github.com/chrisbanes/haze
+    implementation("dev.chrisbanes.haze:haze:2.0.0")
+    implementation("dev.chrisbanes.haze:haze-blur:2.0.0")
 }

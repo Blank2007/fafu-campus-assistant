@@ -20,12 +20,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -36,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,31 +48,34 @@ private data class Credit(val name: String, val author: String, val url: String,
 
 private val credits = listOf(
     Credit("WakeUp 课程表（WakeupSchedule_Kotlin）", "YZune", "https://github.com/YZune/WakeUpSchedule", "Apache-2.0", "间接参考：周课表格 UI 设计思路（未复制源码）"),
-    Credit("ling_QuickShortcut（快递身份码快捷方式）", "qinyuanxin132", "https://github.com/qinyuanxin132/ling_QuickShortcut", "MIT", "间接参考：拼多多【身份码】跳转思路（未复制源码）"),
+    Credit("ling_QuickShortcut（快递身份码快捷方式）", "qinyuanxin132", "https://github.com/qinyuanxin132/ling_QuickShortcut", "MIT", "间接参考：拼多多【身份码】跳转思路"),
     Credit("拼多多 Scheme 公开资料", "社区整理（CSDN）", "https://blog.csdn.net/weixin_48141487/article/details/140077257", "公开资料 / 合理引用", "间接参考：拼多多页面拉起路径"),
     Credit("支付宝菜鸟小程序取件码", "V2EX 社区实测", "https://v2ex.com/t/1002900", "公开资料 / 合理引用", "取件码直达：alipays 小程序 appId"),
     Credit("建阳公交线路通告", "武夷发展集团·建阳区公交公司（大武夷新闻网）", "https://www.greatwuyi.com/guangg/content/202508/27/c1555764.html", "公开资讯 / 合理引用", "公交数据：103/105/107 路站点与时刻"),
-    Credit("无敌电动公交数据", "modiauto.com.cn", "https://www.modiauto.com.cn/cx/bus_142302.html", "公开资讯 / 合理引用", "公交路线图截图与发车时刻核实（2026-08/09）"),
+    Credit("无敌电动公交数据", "modiauto.com.cn", "https://www.modiauto.com.cn/cx/bus_142302.html", "公开资讯 / 合理引用", "公交发车时刻核实（2026-08/09）"),
+    Credit("Haze（亚克力模糊）", "Chris Banes", "https://github.com/chrisbanes/haze", "Apache-2.0", "直接依赖：底部悬浮栏亚克力模糊材质"),
     Credit("快递100", "深圳前海百递网络", "https://www.kuaidi100.com", "平台服务（查询接口）", "快递物流轨迹查询接口"),
     Credit("Jetpack Compose / AndroidX", "Google & AOSP", "https://android.googlesource.com/platform/frameworks/support", "Apache-2.0", "直接依赖：Material 3 UI、原生动画"),
     Credit("Kotlin", "JetBrains", "https://github.com/JetBrains/kotlin", "Apache-2.0", "直接依赖：开发语言"),
 )
 
+/** 版本修改日志（精确到分钟） */
 private val changelog = listOf(
-    "v2.15" to "路线图改为真实地图截图；首页新增农大常用网站；新增设置页（自定义背景/主题色），关于内容并入设置页",
-    "v2.14" to "公交路线图内置；发车时刻分时段排版；保留邮箱仅不公开 QQ 号",
-    "v2.13" to "移除 QQ 号与 QQ 邮箱（隐私保护）；含 v2.12 全部更新",
-    "v2.12" to "拼多多身份码微信入口（含驿站点）；课表学期校准（9/28=第五周）；公交时刻核实补齐",
-    "v2.11" to "快递查询历史记录；关于页新增作者信息与代码归属说明",
-    "v2.10" to "快递查询 API 直出物流轨迹",
-    "v2.9" to "快递 App 内显示；读取剪贴板快捷填单号",
-    "v2.8" to "公交去高德；UI 过渡动画；版本日志折叠",
-    "v2.7" to "关于页精简；电商只留菜鸟/拼多多；快递单号查询上线",
-    "v2.2-v2.6" to "底部功能栏/公交时刻筛选/课表手动模式/应用检测权限化等（详见 CHANGELOG.md）",
-    "v1.x-v2.1" to "初版到原生 Material 化（历史版本，详见 CHANGELOG.md）",
+    "v2.16 · 2026-09-28 23:35" to "深色模式开关；悬浮亚克力底栏；异形屏全屏背景适配；公交站点竖排；快递多公司兼容并标注支持范围；微信身份码自动进入；背景只留自定义；个性化（课表字号/显示周末）；日志精确到分钟",
+    "v2.15 · 2026-09-28 23:00" to "路线图改地图截图；首页农大常用网站；设置页（自定义背景/主题色）",
+    "v2.14 · 2026-09-28 00:29" to "公交路线图内置；发车时刻分时段排版；保留邮箱仅不公开 QQ 号",
+    "v2.13 · 2026-09-28 00:16" to "移除 QQ 号与 QQ 邮箱（隐私）；含 v2.12 全部更新",
+    "v2.12 · 2026-09-27 23:56" to "拼多多身份码微信入口（含驿站点）；课表学期校准（9/28=第五周）；公交时刻核实补齐",
+    "v2.11 · 2026-09-27 00:16" to "快递查询历史记录；关于页新增作者信息与代码归属说明",
+    "v2.10 · 2026-09-27 00:00" to "快递查询 API 直出物流轨迹",
+    "v2.9 · 2026-09-26 23:30" to "快递 App 内显示；读取剪贴板快捷填单号",
+    "v2.8 · 2026-09-26 23:22" to "公交去高德改掌上公交提示；UI 过渡动画；版本日志折叠",
+    "v2.7 · 2026-09-26 23:11" to "关于页精简；电商只留菜鸟/拼多多；快递单号查询上线",
+    "v2.2-v2.6 · 2026-09-26 21:45~23:05" to "底部功能栏/公交时刻筛选/课表手动模式/应用检测权限化等（详见 CHANGELOG.md）",
+    "v1.x-v2.1 · 2026-09-25 23:45 起" to "初版到原生 Material 化（历史版本，详见 CHANGELOG.md）",
 )
 
-/** 设置页：外观自定义 + 关于/致谢/版本日志 */
+/** 设置页：外观 / 个性化 / 关于 / 致谢 / 版本日志 */
 @Composable
 fun SettingsScreen() {
     val context = LocalContext.current
@@ -89,7 +91,6 @@ fun SettingsScreen() {
                     file.outputStream().use { output -> input.copyTo(output) }
                 }
                 ThemePrefs.setBgImage(context, file.absolutePath)
-                ThemePrefs.setBgMode(context, ThemePrefs.BgMode.IMAGE)
                 Toast.makeText(context, "背景已更换 ✅", Toast.LENGTH_SHORT).show()
             }.onFailure {
                 Toast.makeText(context, "背景设置失败", Toast.LENGTH_SHORT).show()
@@ -105,42 +106,55 @@ fun SettingsScreen() {
     ) {
         item { ScreenHeader("设置") }
 
-        // ---- 外观：背景 ----
+        // ---- 深色模式 ----
+        item {
+            Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
+                Row(
+                    Modifier.padding(18.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("🌙 深色模式", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "开启后全局使用深色配色（当前为可选开关，按需启用）",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        )
+                    }
+                    Switch(
+                        checked = ThemePrefs.darkMode.value,
+                        onCheckedChange = { ThemePrefs.setDark(context, it) },
+                    )
+                }
+            }
+        }
+
+        // ---- 背景（只保留自定义）----
         item {
             Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("🎨 软件背景", style = MaterialTheme.typography.titleMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ThemePrefs.BgMode.entries.take(4).forEach { m ->
-                            FilterChip(
-                                selected = ThemePrefs.bgMode.value == m,
-                                onClick = { ThemePrefs.setBgMode(context, m) },
-                                label = { Text(m.label) },
-                            )
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = ThemePrefs.bgMode.value == ThemePrefs.BgMode.IMAGE,
+                        OutlinedButton(
                             onClick = {
-                                if (ThemePrefs.bgImagePath.value.isBlank()) {
-                                    pickBgImage.launch(
-                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                    )
-                                } else {
-                                    ThemePrefs.setBgMode(context, ThemePrefs.BgMode.IMAGE)
-                                }
+                                pickBgImage.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
                             },
-                            label = { Text("自定义图片") },
-                        )
-                        OutlinedButton(onClick = {
-                            pickBgImage.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
-                        }) { Text("选择图片…") }
+                            modifier = Modifier.weight(1f),
+                        ) { Text("选择自定义背景图") }
+                        OutlinedButton(
+                            onClick = {
+                                ThemePrefs.setBgImage(context, "")
+                                Toast.makeText(context, "已恢复默认背景", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("恢复默认") }
                     }
                     Text(
-                        "自定义图片会裁切铺满全屏，随时可切回默认。",
+                        if (ThemePrefs.bgImagePath.value.isBlank()) "当前：默认背景"
+                        else "当前：自定义图片（裁切铺满全屏，含异形屏）",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
@@ -148,7 +162,7 @@ fun SettingsScreen() {
             }
         }
 
-        // ---- 外观：主题色 ----
+        // ---- 主题色 ----
         item {
             Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -167,18 +181,50 @@ fun SettingsScreen() {
                                         .size(36.dp)
                                         .clip(CircleShape)
                                         .background(color)
-                                        .then(
-                                            if (ThemePrefs.themeColorIndex.value == i)
-                                                Modifier.background(
-                                                    Color.Transparent, CircleShape
-                                                )
-                                            else Modifier
-                                        )
                                 )
-                                Text(label, style = MaterialTheme.typography.labelSmall)
+                                Text(
+                                    label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (ThemePrefs.themeColorIndex.value == i) FontWeight.Bold
+                                    else FontWeight.Normal,
+                                )
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // ---- 个性化 ----
+        item {
+            Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(2.dp)) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("⚙️ 个性化", style = MaterialTheme.typography.titleMedium)
+                    Text("课表字号", style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("小", "中", "大").forEachIndexed { i, t ->
+                            FilterChip(
+                                selected = ThemePrefs.scheduleFontScale.value == i,
+                                onClick = { ThemePrefs.setFontScale(context, i) },
+                                label = { Text(t) },
+                            )
+                        }
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("课表显示周六/周日", style = MaterialTheme.typography.bodySmall)
+                        Switch(
+                            checked = ThemePrefs.showWeekend.value,
+                            onCheckedChange = { ThemePrefs.setShowWeekend(context, it) },
+                        )
+                    }
+                    Text(
+                        "更多个性化持续增加中（欢迎提建议）",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
                 }
             }
         }
@@ -286,10 +332,10 @@ fun SettingsScreen() {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("致谢声明（详细）", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "1. 直接依赖：Jetpack Compose / AndroidX、Kotlin —— Apache-2.0，版权归 Google、JetBrains，分发时保留原始许可证与署名。\n\n" +
-                            "2. 间接参考：WakeUp 课程表、ling_QuickShortcut 等 —— 仅借鉴公开设计思路与跳转方案，未复制源码，著作权归原作者所有。\n\n" +
-                            "3. 公开资料与数据：公交数据引自建阳公交官方通告与无敌电动公开数据（路线图截自其公开线路图，如有异议请联系撤下）；" +
-                            "快递轨迹由快递100 提供查询接口；拼多多/支付宝跳转路径引自社区公开资料。\n\n" +
+                        "1. 直接依赖：Haze、Jetpack Compose / AndroidX、Kotlin —— 各自许可证见上表，分发时保留原始许可证与署名。\n\n" +
+                            "2. 间接参考：WakeUp 课程表、ling_QuickShortcut 等 —— 仅借鉴公开思路，未复制源码，著作权归原作者所有。\n\n" +
+                            "3. 公开资料与数据：公交数据引自建阳公交官方通告与无敌电动公开数据；快递轨迹由快递100 提供查询接口；" +
+                            "拼多多/支付宝跳转路径引自社区公开资料。\n\n" +
                             "4. 本项目免费开源，仅供学习交流使用。",
                         style = MaterialTheme.typography.bodySmall,
                     )

@@ -47,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.campusglass.ui.theme.ThemePrefs
 import com.campusglass.ui.widgets.ScreenHeader
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -313,6 +314,8 @@ private fun HolidayBanner(week: Int) {
 @Composable
 private fun TimetableGrid(courses: List<Course>, week: Int, onClick: (Course) -> Unit) {
     val rows = listOf(1..2, 3..4, 5..6, 7..8, 9..10, 11..11)
+    val days = if (ThemePrefs.showWeekend.value) 1..7 else 1..5
+    val sc = listOf(0.85f, 1f, 1.2f)[ThemePrefs.scheduleFontScale.value]
     val todayWd = ScheduleStore.weekdayOf(LocalDate.now())
     val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 
@@ -320,7 +323,7 @@ private fun TimetableGrid(courses: List<Course>, week: Int, onClick: (Course) ->
         Column(Modifier.padding(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.width(38.dp))
-                (1..7).forEach { wd ->
+                days.forEach { wd ->
                     val date = ScheduleStore.dateOf(LocalContext.current, week, wd)
                     Column(
                         Modifier.weight(1f),
@@ -357,7 +360,7 @@ private fun TimetableGrid(courses: List<Course>, week: Int, onClick: (Course) ->
                             fontSize = 8.sp,
                         )
                     }
-                    (1..7).forEach { wd ->
+                    days.forEach { wd ->
                         Box(
                             Modifier
                                 .weight(1f)
@@ -393,6 +396,9 @@ private fun TimetableGrid(courses: List<Course>, week: Int, onClick: (Course) ->
 private fun CourseBlock(c: Course, onClick: (Course) -> Unit) {
     val span = (c.endPeriod - c.startPeriod + 1).coerceIn(1, 4)
     val color = PALETTE[abs(c.name.hashCode()) % PALETTE.size]
+    val sc = listOf(0.85f, 1f, 1.2f)[ThemePrefs.scheduleFontScale.value]
+    val base = MaterialTheme.typography.labelSmall
+    val style = base.copy(fontSize = base.fontSize * sc)
     Card(
         onClick = { onClick(c) },
         shape = RoundedCornerShape(8.dp),
@@ -405,14 +411,14 @@ private fun CourseBlock(c: Course, onClick: (Course) -> Unit) {
             Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(1.dp),
         ) {
-            Text(c.name, style = MaterialTheme.typography.labelSmall,
+            Text(c.name, style = style,
                 fontWeight = FontWeight.Bold, maxLines = 3)
             if (c.location.isNotBlank()) {
-                Text(c.location, style = MaterialTheme.typography.labelSmall, maxLines = 2)
+                Text(c.location, style = style, maxLines = 2)
             }
             Text(
                 c.weeks.sorted().joinToString(",") + "周",
-                style = MaterialTheme.typography.labelSmall,
+                style = style,
                 fontSize = 7.sp,
                 color = Color.Black.copy(alpha = 0.55f),
                 maxLines = 1,
