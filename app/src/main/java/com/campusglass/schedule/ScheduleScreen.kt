@@ -67,7 +67,7 @@ private fun dayLabel(wd: Int) = "周" + "一二三四五六日"[wd - 1]
 /** 一周显示顺序：周日起始 */
 private val DAY_ORDER = listOf(7, 1, 2, 3, 4, 5, 6)
 
-private data class Slot(var weekday: Int, var start: Int, var end: Int)
+private data class Slot(val weekday: Int, val start: Int, val end: Int)
 
 // ======================= 主界面 =======================
 
@@ -402,24 +402,26 @@ private fun AddCourseDialog(onDismiss: () -> Unit, onSave: (List<Course>) -> Uni
                                     TextButton(onClick = { slots.removeAt(i) }) { Text("删除") }
                                 }
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                listOf(7, 1, 2, 3, 4, 5, 6).forEach { wd ->
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                items(listOf(7, 1, 2, 3, 4, 5, 6)) { wd ->
                                     FilterChip(
-                                        selected = slot.weekday == wd,
-                                        onClick = { slot.weekday = wd },
+                                        selected = slots[i].weekday == wd,
+                                        onClick = { slots[i] = slots[i].copy(weekday = wd) },
                                         label = { Text(dayLabel(wd), fontSize = 10.sp) },
                                     )
                                 }
                             }
                             Text("起始节", style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurface)
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                (1..11).forEach { p ->
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                items((1..11).toList()) { p ->
                                     FilterChip(
-                                        selected = slot.start == p,
+                                        selected = slots[i].start == p,
                                         onClick = {
-                                            slot.start = p
-                                            if (slot.end < p) slot.end = p
+                                            slots[i] = slots[i].copy(
+                                                start = p,
+                                                end = if (slots[i].end < p) p else slots[i].end,
+                                            )
                                         },
                                         label = { Text("$p", fontSize = 11.sp) },
                                     )
@@ -427,13 +429,15 @@ private fun AddCourseDialog(onDismiss: () -> Unit, onSave: (List<Course>) -> Uni
                             }
                             Text("结束节", style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurface)
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                (slot.start..11).forEach { p ->
-                                    FilterChip(
-                                        selected = slot.end == p,
-                                        onClick = { slot.end = p },
-                                        label = { Text("$p", fontSize = 11.sp) },
-                                    )
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                items((1..11).toList()) { p ->
+                                    if (p >= slots[i].start) {
+                                        FilterChip(
+                                            selected = slots[i].end == p,
+                                            onClick = { slots[i] = slots[i].copy(end = p) },
+                                            label = { Text("$p", fontSize = 11.sp) },
+                                        )
+                                    }
                                 }
                             }
                         }
