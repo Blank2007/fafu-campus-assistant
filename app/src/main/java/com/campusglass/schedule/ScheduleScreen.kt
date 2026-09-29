@@ -393,6 +393,8 @@ private fun AddCourseDialog(
     onSave: (List<Course>) -> Unit,
 ) {
     val editing = initial != null
+    val context2 = LocalContext.current
+    val maxP = PeriodTable.periodsPerDay(context2).coerceIn(2, 24)   // 节次上限跟随自定义
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var teacher by remember { mutableStateOf(initial?.teacher ?: "") }
     var location by remember { mutableStateOf(initial?.location ?: "") }
@@ -463,7 +465,7 @@ private fun AddCourseDialog(
                             Text("起始节", style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurface)
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                items((1..11).toList()) { p ->
+                                items((1..maxP).toList()) { p ->
                                     FilterChip(
                                         selected = slots[i].start == p,
                                         onClick = {
@@ -479,7 +481,7 @@ private fun AddCourseDialog(
                             Text("结束节", style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurface)
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                items((1..11).toList()) { p ->
+                                items((1..maxP).toList()) { p ->
                                     if (p >= slots[i].start) {
                                         FilterChip(
                                             selected = slots[i].end == p,

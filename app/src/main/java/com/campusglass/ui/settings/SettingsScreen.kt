@@ -85,6 +85,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
+    "v2.22 · 2026-09-30 00:55" to "底栏整体重建（自定义胶囊模型，描边内嵌绘制不断边）；底部黑块根治（系统导航栏对比度遮罩）；每天节数可自定义到 24；七彩推荐色修偏色（标准零漂移）+ 改滑动不截断",
     "v2.21 · 2026-09-30 00:35" to "课程可编辑；连上多节跨行占满多格（冲突左右分栏）；每天上课节数可自定义（选项改为滑动不受截断）；主题色新增小米「色彩风格」（标准/鲜艳/柔和）+ 色温；底栏边框重构（消除模糊毛边+发丝描边）",
     "v2.20 · 2026-09-29 23:55" to "修复添加课程里周几/节次无法选择的 bug（状态不刷新 + 芯片溢出）：改为可观察状态 + 横向滑动选择",
     "v2.19 · 2026-09-29 22:55" to "课表从零重写（修复周几错位等全部旧问题，间距优化）；深色模式黑字问题全局根治（文字颜色统一切题）；检查更新修复（GitHub API 需 User-Agent 导致 403）",
@@ -232,24 +233,23 @@ fun SettingsScreen() {
             AcrylicCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("🎯 主题色", style = MaterialTheme.typography.titleMedium)
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // 系统主题色（动态取色）
-                        ColorDot(
-                            color = MaterialTheme.colorScheme.primary,
-                            label = "系统",
-                            selected = ThemePrefs.themeColorIndex.value == 0,
-                        ) { ThemePrefs.setColorIndex(context, 0) }
-                        // 7 推荐色
-                        ThemePrefs.THEME_COLORS.forEachIndexed { i, (label, color) ->
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        item {
                             ColorDot(
-                                color = color,
+                                color = MaterialTheme.colorScheme.primary,
+                                label = "系统",
+                                selected = ThemePrefs.themeColorIndex.value == 0,
+                            ) { ThemePrefs.setColorIndex(context, 0) }
+                        }
+                        // 7 推荐色（显示色=实际生效色，防偏色）
+                        items(ThemePrefs.THEME_COLORS.size) { i ->
+                            val (label, color) = ThemePrefs.THEME_COLORS[i]
+                            ColorDot(
+                                color = com.campusglass.ui.theme.adjustColorStyle(color),
                                 label = label,
                                 selected = ThemePrefs.themeColorIndex.value == i + 1,
                             ) { ThemePrefs.setColorIndex(context, i + 1) }
-                    }
+                        }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { showColorPicker = true }) {
@@ -537,9 +537,9 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("每天上课节数（点不动就左右滑）", style = MaterialTheme.typography.labelLarge)
+                Text("每天上课节数（最多 24，可自定义）", style = MaterialTheme.typography.labelLarge)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items((4..11).toList()) { n ->
+                    items((4..12).toList()) { n ->
                         FilterChip(
                             selected = perDayState == n,
                             onClick = { perDayState = n },
@@ -547,6 +547,15 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
                         )
                     }
                 }
+                OutlinedTextField(
+                    value = perDayState.toString(),
+                    onValueChange = { v ->
+                        perDayState = v.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 24) ?: perDayState
+                    },
+                    Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("自定义每天节数（1-24，可输入 13、15 等大数字）") },
+                )
                 OutlinedTextField(
                     termStartText, { termStartText = it },
                     Modifier.fillMaxWidth(), singleLine = true,

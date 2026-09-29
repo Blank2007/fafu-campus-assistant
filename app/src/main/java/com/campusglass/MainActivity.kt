@@ -1,4 +1,9 @@
 package com.campusglass
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.unit.sp
+import com.campusglass.ui.glass.hairlineBorder
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -82,6 +87,15 @@ import java.io.File
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
+        // 消除底部黑块：系统导航栏透明 + 关闭系统强制对比度遮罩（黑色横条的真凶）
+        @Suppress("DEPRECATION")
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        @Suppress("DEPRECATION")
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            window.isStatusBarContrastEnforced = false
+            window.isNavigationBarContrastEnforced = false
+        }
         super.onCreate(savedInstanceState)
         ThemePrefs.load(this)
         setContent {
@@ -162,26 +176,43 @@ fun CampusGlassApp() {
                             val hairline = MaterialTheme.colorScheme.outline.copy(
                                 alpha = if (dark) 0.35f else 0.22f
                             )
-                            NavigationBar(
-                                modifier = barModifier.border(
-                                    width = 1.dp,
-                                    color = hairline,
-                                    shape = RoundedCornerShape(26.dp),
-                                ),
-                                containerColor = Color.Transparent,
-                                tonalElevation = 0.dp,
-                                windowInsets = WindowInsets(0, 0, 0, 0),
+                            Row(
+                                modifier = barModifier.hairlineBorder(hairline),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Tab.entries.forEach { t ->
-                                    NavigationBarItem(
-                                        selected = tab == t,
-                                        onClick = { tab = t },
-                                        icon = { Icon(t.icon, contentDescription = t.label) },
-                                        label = { Text(t.label) },
-                                        colors = NavigationBarItemDefaults.colors(
-                                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                                        ),
-                                    )
+                                    val sel = tab == t
+                                    val tint = if (sel) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                                    Column(
+                                        Modifier
+                                            .weight(1f)
+                                            .clip(RoundedCornerShape(18.dp))
+                                            .clickable { tab = t }
+                                            .padding(vertical = 9.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                    ) {
+                                        Box(
+                                            Modifier
+                                                .clip(RoundedCornerShape(16.dp))
+                                                .background(
+                                                    if (sel) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                                                    else Color.Transparent
+                                                )
+                                                .padding(horizontal = 14.dp, vertical = 5.dp),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Icon(t.icon, contentDescription = t.label, tint = tint)
+                                                Text(
+                                                    t.label,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontSize = 10.sp,
+                                                    color = tint,
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

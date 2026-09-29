@@ -9,8 +9,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.campusglass.ui.theme.ThemePrefs
@@ -55,6 +60,20 @@ fun Modifier.acrylic(
         .hazeBlur(HazeInput.Backdrop(state), style)   // 先模糊
         .clip(shape)                                   // 后裁切：模糊不溢出圆角，消除毛边框
 }
+
+/** 发丝描边：向内嵌半宽绘制，四角连续不断边（修复边框断开/缺失） */
+fun Modifier.hairlineBorder(color: Color, radius: Dp = 26.dp): Modifier =
+    this.drawWithContent {
+        drawContent()
+        val w = 1.dp.toPx()
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(w / 2, w / 2),
+            size = Size(this.size.width - w, this.size.height - w),
+            cornerRadius = CornerRadius(radius.toPx()),
+            style = Stroke(width = w),
+        )
+    }
 
 /** 全局卡片：有自定义背景时亚克力，否则普通卡片 */
 @Composable
