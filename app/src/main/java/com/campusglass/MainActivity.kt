@@ -64,6 +64,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.foundation.border
 import androidx.compose.ui.unit.dp
 import com.campusglass.bus.BusScreen
 import com.campusglass.pickup.PickupScreen
@@ -158,8 +159,15 @@ fun CampusGlassApp() {
                                     .clip(RoundedCornerShape(26.dp))
                                     .background(MaterialTheme.colorScheme.surface)
                             }
+                            val hairline = MaterialTheme.colorScheme.outline.copy(
+                                alpha = if (dark) 0.35f else 0.22f
+                            )
                             NavigationBar(
-                                modifier = barModifier,
+                                modifier = barModifier.border(
+                                    width = 1.dp,
+                                    color = hairline,
+                                    shape = RoundedCornerShape(26.dp),
+                                ),
                                 containerColor = Color.Transparent,
                                 tonalElevation = 0.dp,
                                 windowInsets = WindowInsets(0, 0, 0, 0),

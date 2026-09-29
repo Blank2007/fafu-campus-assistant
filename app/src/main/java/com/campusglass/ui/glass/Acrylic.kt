@@ -21,6 +21,7 @@ import dev.chrisbanes.haze.blur.HazeColorEffect
 import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
+import androidx.compose.foundation.border
 
 /**
  * 亚克力（Acrylic）材质体系。
@@ -51,8 +52,8 @@ fun Modifier.acrylic(
         colorEffects(listOf(HazeColorEffect.tint(tint)))
     }
     return this
-        .clip(shape)
-        .hazeBlur(HazeInput.Backdrop(state), style)
+        .hazeBlur(HazeInput.Backdrop(state), style)   // 先模糊
+        .clip(shape)                                   // 后裁切：模糊不溢出圆角，消除毛边框
 }
 
 /** 全局卡片：有自定义背景时亚克力，否则普通卡片 */

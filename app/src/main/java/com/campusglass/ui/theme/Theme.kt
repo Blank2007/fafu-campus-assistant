@@ -8,6 +8,7 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 
 private val LightColors = lightColorScheme(
@@ -47,7 +48,7 @@ fun CampusGlassTheme(
         idx == 0 -> null                       // 系统主题色（动态）
         idx <= ThemePrefs.THEME_COLORS.size -> ThemePrefs.THEME_COLORS[idx - 1].second
         else -> ThemePrefs.customColor.value   // 自定义
-    }
+    }?.let { adjustColorStyle(it) }            // 色彩风格 + 色温
 
     val colorScheme = when {
         primary == null && dynamicColor ->
@@ -58,4 +59,17 @@ fun CampusGlassTheme(
         else -> LightColors.copy(primary = primary)
     }
     MaterialTheme(colorScheme = colorScheme, content = content)
+}
+
+/** 色彩风格（标准/鲜艳/柔和）+ 色温（冷	o 暖）→ 小米「色彩风格」式调整 */
+fun adjustColorStyle(c: Color): Color {
+    val hs = FloatArray(3)
+    android.graphics.Color.colorToHSV(c.toArgb(), hs)
+    hs[1] = (hs[1] * when (ThemePrefs.colorStyle.value) {
+        1 -> 1.35f   // 鲜艳
+        2 -> 0.55f   // 柔和
+        else -> 1f   // 标准
+    }).coerceIn(0f, 1f)
+    hs[0] = (hs[0] + ThemePrefs.colorTemp.value * 1.2f + 360f) % 360f
+    return Color(android.graphics.Color.HSVToColor(hs))
 }

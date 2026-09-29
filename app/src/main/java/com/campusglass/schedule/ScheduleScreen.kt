@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -45,7 +46,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.campusglass.ui.theme.ThemePrefs
@@ -54,7 +54,7 @@ import java.time.LocalDate
 
 // ======================= 常量 =======================
 
-/** 高对比课程色块（浅色底 + 黑字，深浅模式下都清晰） */
+/** 高对比课程色块（浅色底 + 黑字，深浅模式都清晰） */
 private val PALETTE = listOf(
     Color(0xFF8FA8FF), Color(0xFFFFBC6B), Color(0xFF6FDFC0), Color(0xFFFF9DB0),
     Color(0xFFC4A0FF), Color(0xFFFFD966), Color(0xFF72D4F0), Color(0xFFAEDD6E),
@@ -67,13 +67,15 @@ private fun dayLabel(wd: Int) = "周" + "一二三四五六日"[wd - 1]
 /** 一周显示顺序：周日起始 */
 private val DAY_ORDER = listOf(7, 1, 2, 3, 4, 5, 6)
 
+private const val ROW_H = 74  // 每节行高 dp
+
 private data class Slot(val weekday: Int, val start: Int, val end: Int)
 
 // ======================= 主界面 =======================
 
 /**
- * 课表（全新重写）：
- * 周日起算 · 一节一行 · 课程块三行（名称/地点/教师）· 分段周次 · 同名多时段。
+ * 课表 v2：
+ * 周日起算 · 一节一行 · 跨节课程纵向占满多格 · 同时段冲突左右分栏 · 课程可编辑。
  */
 @Composable
 fun ScheduleScreen() {
@@ -82,6 +84,7 @@ fun ScheduleScreen() {
     var week by remember { mutableIntStateOf(ScheduleStore.currentWeek(context)) }
     var showAdd by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<Course?>(null) }
+    var editTarget by remember { mutableStateOf<Course?>(null) }
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -93,13 +96,12 @@ fun ScheduleScreen() {
 
             item {
                 Text(
-                    "第${week}周（周日起算）· 点周次切换 · 点课程看详情",
+                    "第${week}周（周日起算）· 点周次切换 · 点课程可编辑/删除",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                 )
             }
 
-            // 周次选择
             item {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items((1..20).toList()) { w ->
@@ -112,13 +114,8 @@ fun ScheduleScreen() {
                 }
             }
 
-            // 节假日
             item { HolidayBanner(week) }
-
-            // 课表格
-            item {
-                Timetable(courses, week) { detail = it }
-            }
+            item { Timetable(courses, week) { detail = it } }
         }
 
         ExtendedFloatingActionButton(
@@ -131,18 +128,7 @@ fun ScheduleScreen() {
         )
     }
 
-    if (showAdd) {
-        AddCourseDialog(
-            onDismiss = { showAdd = false },
-            onSave = { newOnes ->
-                courses = courses + newOnes
-                ScheduleStore.saveCourses(context, courses)
-                showAdd = false
-                Toast.makeText(context, "已添加：${newOnes.first().name}（${newOnes.size} 个时段）", Toast.LENGTH_SHORT).show()
-            },
-        )
-    }
-
+    // 详情：编辑 / 删除
     detail?.let { c ->
         AlertDialog(
             onDismissRequest = { detail = null },
@@ -151,18 +137,18 @@ fun ScheduleScreen() {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("老师：${c.teacher.ifBlank { "—" }}", color = MaterialTheme.colorScheme.onSurface)
                     Text("地点：${c.location.ifBlank { "—" }}", color = MaterialTheme.colorScheme.onSurface)
-                    Text(
-                        "时间：${dayLabel(c.weekday)} 第${c.startPeriod}-${c.endPeriod}节",
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        "周次：" + c.weeks.sorted().joinToString(",") + " 周",
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
+                    Text("时间：${dayLabel(c.weekday)} 第${c.startPeriod}-${c.endPeriod}节（占${c.endPeriod - c.startPeriod + 1}格）",
+                        color = MaterialTheme.colorScheme.onSurface)
+                    Text("周次：" + c.weeks.sorted().joinToString(",") + " 周",
+                        color = MaterialTheme.colorScheme.onSurface)
                 }
             },
             confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    TextButton(onClick = {
+                        editTarget = c
+                        detail = null
+                    }) { Text("✏️ 编辑") }
                     TextButton(onClick = {
                         courses = courses - c
                         ScheduleStore.saveCourses(context, courses)
@@ -172,7 +158,7 @@ fun ScheduleScreen() {
                         courses = courses.filterNot { it.name == c.name }
                         ScheduleStore.saveCourses(context, courses)
                         detail = null
-                    }) { Text("删除同名全部") }
+                    }) { Text("删除同名") }
                 }
             },
             dismissButton = {
@@ -180,9 +166,32 @@ fun ScheduleScreen() {
             },
         )
     }
+
+    // 新增 / 编辑
+    if (showAdd || editTarget != null) {
+        AddCourseDialog(
+            initial = editTarget,
+            onDismiss = {
+                showAdd = false
+                editTarget = null
+            },
+            onSave = { newOnes ->
+                if (editTarget != null) {
+                    courses = courses - editTarget!! + newOnes.first()
+                    Toast.makeText(context, "已更新：${newOnes.first().name}", Toast.LENGTH_SHORT).show()
+                } else {
+                    courses = courses + newOnes
+                    Toast.makeText(context, "已添加：${newOnes.first().name}（${newOnes.size} 个时段）", Toast.LENGTH_SHORT).show()
+                }
+                ScheduleStore.saveCourses(context, courses)
+                showAdd = false
+                editTarget = null
+            },
+        )
+    }
 }
 
-// ======================= 周表格 =======================
+// ======================= 周表格（跨节占格） =======================
 
 @Composable
 private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Unit) {
@@ -220,47 +229,75 @@ private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Un
                 }
             }
 
-            // 每节一行
-            (1..periods).forEach { p ->
-                Row(Modifier.height(74.dp)) {
-                    Column(
-                        Modifier
-                            .width(42.dp)
-                            .fillMaxHeight(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        Text("$p", style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurface)
-                        Text(
-                            PeriodTable.startStr(context, p),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 7.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                        )
-                    }
-                    days.forEach { wd ->
-                        Box(
-                            Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .padding(2.dp)
-                                .background(
-                                    if (wd == todayWd) MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)
-                                    else Color.Transparent,
-                                    RoundedCornerShape(8.dp),
-                                )
+            // 表体：左侧节次 + 每天一列（格子背景层 + 课程层绝对定位跨行）
+            Row {
+                // 节次标签列
+                Column(Modifier.width(42.dp)) {
+                    (1..periods).forEach { p ->
+                        Column(
+                            Modifier.height(ROW_H.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
                         ) {
-                            val cell = courses.filter {
-                                it.weekday == wd && it.startPeriod == p && week in it.weeks
+                            Text("$p", style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface)
+                            Text(
+                                PeriodTable.startStr(context, p),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 7.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                            )
+                        }
+                    }
+                }
+                // 每天一列
+                days.forEach { wd ->
+                    val dayCourses = courses.filter { it.weekday == wd && week in it.weeks }
+                    // 冲突分道：同一时段重叠的课各占一道
+                    val lanes = mutableListOf<MutableList<Course>>()
+                    dayCourses.sortedBy { it.startPeriod }.forEach { c ->
+                        val lane = lanes.firstOrNull { l ->
+                            l.none { it.startPeriod <= c.endPeriod && c.startPeriod <= it.endPeriod }
+                        }
+                        if (lane != null) lane.add(c) else lanes.add(mutableListOf(c))
+                    }
+
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .height((periods * ROW_H).dp)
+                    ) {
+                        // 背景格子层
+                        Column(Modifier.fillMaxSize()) {
+                            (1..periods).forEach { _ ->
+                                Box(
+                                    Modifier
+                                        .height(ROW_H.dp)
+                                        .fillMaxWidth()
+                                        .padding(2.dp)
+                                        .background(
+                                            if (wd == todayWd) MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)
+                                            else Color.Transparent,
+                                            RoundedCornerShape(8.dp),
+                                        )
+                                )
                             }
-                            when (cell.size) {
-                                1 -> CourseBlock(cell.first(), onCourse)
-                                else -> if (cell.size > 1) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-                                        cell.forEach { c ->
-                                            Box(Modifier.weight(1f)) { CourseBlock(c, onCourse) }
-                                        }
+                        }
+                        // 课程层（绝对定位，跨节纵向占满）
+                        Row(Modifier.fillMaxSize()) {
+                            lanes.forEach { lane ->
+                                Box(Modifier.weight(1f).fillMaxHeight()) {
+                                    lane.forEach { c ->
+                                        val span = (c.endPeriod - c.startPeriod + 1).coerceIn(1, periods)
+                                        CourseBlock(
+                                            c,
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 2.dp)
+                                                .absoluteOffset(y = ((c.startPeriod - 1) * ROW_H + 2).dp)
+                                                .height((span * ROW_H - 4).dp),
+                                            onCourse,
+                                        )
                                     }
                                 }
                             }
@@ -273,8 +310,7 @@ private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Un
 }
 
 @Composable
-private fun CourseBlock(c: Course, onCourse: (Course) -> Unit) {
-    val span = (c.endPeriod - c.startPeriod + 1).coerceIn(1, 8)
+private fun CourseBlock(c: Course, modifier: Modifier, onCourse: (Course) -> Unit) {
     val color = PALETTE[(c.name.hashCode() * 31 + c.weekday * 7 + c.startPeriod).let { if (it < 0) -it else it } % PALETTE.size]
     val scale = listOf(0.85f, 1f, 1.2f)[ThemePrefs.scheduleFontScale.value]
     val base = MaterialTheme.typography.labelSmall
@@ -284,9 +320,7 @@ private fun CourseBlock(c: Course, onCourse: (Course) -> Unit) {
         onClick = { onCourse(c) },
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = color),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height((70 * span + 4 * (span - 1)).dp),
+        modifier = modifier,
     ) {
         Column(
             Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
@@ -350,20 +384,34 @@ private fun HolidayBanner(week: Int) {
     }
 }
 
-// ======================= 添加课程 =======================
+// ======================= 添加 / 编辑课程 =======================
 
 @Composable
-private fun AddCourseDialog(onDismiss: () -> Unit, onSave: (List<Course>) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var teacher by remember { mutableStateOf("") }
-    var location by remember { mutableStateOf("") }
-    val slots = remember { mutableStateListOf(Slot(1, 1, 2)) }
-    var weeksText by remember { mutableStateOf("1-16") }
+private fun AddCourseDialog(
+    initial: Course? = null,
+    onDismiss: () -> Unit,
+    onSave: (List<Course>) -> Unit,
+) {
+    val editing = initial != null
+    var name by remember { mutableStateOf(initial?.name ?: "") }
+    var teacher by remember { mutableStateOf(initial?.teacher ?: "") }
+    var location by remember { mutableStateOf(initial?.location ?: "") }
+    val slots = remember {
+        mutableStateListOf(
+            if (initial != null) Slot(initial.weekday, initial.startPeriod, initial.endPeriod)
+            else Slot(1, 1, 2)
+        )
+    }
+    var weeksText by remember {
+        mutableStateOf(
+            if (initial != null) initial.weeks.sorted().joinToString("-") else "1-16"
+        )
+    }
     var parity by remember { mutableIntStateOf(0) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("✏️ 添加课程") },
+        title = { Text(if (editing) "✏️ 编辑课程" else "✏️ 添加课程") },
         text = {
             Column(
                 Modifier
@@ -380,10 +428,11 @@ private fun AddCourseDialog(onDismiss: () -> Unit, onSave: (List<Course>) -> Uni
                         label = { Text("教室") })
                 }
 
-                Text("🕐 上课时间（可添加多个时段）", style = MaterialTheme.typography.labelLarge,
+                Text("🕐 上课时间（连上多节就把结束节往后选，自动占满多格）",
+                    style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurface)
 
-                slots.forEachIndexed { i, slot ->
+                slots.forEachIndexed { i, _ ->
                     Card(
                         Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(

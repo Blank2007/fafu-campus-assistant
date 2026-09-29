@@ -1,4 +1,5 @@
 package com.campusglass.ui.theme
+import androidx.compose.runtime.mutableFloatStateOf
 
 import android.content.Context
 import androidx.compose.runtime.mutableIntStateOf
@@ -21,6 +22,8 @@ object ThemePrefs {
     /** 0=系统主题色(动态) 1..7=推荐色 8=自定义(调色盘) */
     val themeColorIndex = mutableIntStateOf(0)
     val customColor = mutableStateOf(Color(0xFF3B5BFF))
+    val colorStyle = mutableIntStateOf(0)          // 色彩风格：0 标准 / 1 鲜艳 / 2 柔和（小米色彩风格风格）
+    val colorTemp = mutableFloatStateOf(0f)        // 色温：-20(冷) ~ +20(暖)
 
     val bgImagePath = mutableStateOf("")
     val bgCropMode = mutableStateOf(BgCrop.CENTER)
@@ -49,6 +52,8 @@ object ThemePrefs {
         acrylicEnabled.value = p.getBoolean("acrylic", true)
         themeColorIndex.value = p.getInt("colorIdx", 0).coerceIn(0, 8)
         customColor.value = Color(p.getLong("customColor", 0xFF3B5BFF))
+        colorStyle.value = p.getInt("colorStyle", 0).coerceIn(0, 2)
+        colorTemp.value = p.getFloat("colorTemp", 0f).coerceIn(-20f, 20f)
         bgImagePath.value = p.getString("bgImage", "") ?: ""
         bgCropMode.value = runCatching {
             BgCrop.valueOf(p.getString("bgCrop", "CENTER") ?: "CENTER")
@@ -96,6 +101,16 @@ object ThemePrefs {
     fun setFontScale(c: Context, v: Int) {
         scheduleFontScale.value = v.coerceIn(0, 2)
         prefs(c).edit().putInt("fontScale", scheduleFontScale.value).apply()
+    }
+
+    fun setColorStyle(c: Context, v: Int) {
+        colorStyle.value = v.coerceIn(0, 2)
+        prefs(c).edit().putInt("colorStyle", colorStyle.value).apply()
+    }
+
+    fun setColorTemp(c: Context, v: Float) {
+        colorTemp.value = v.coerceIn(-20f, 20f)
+        prefs(c).edit().putFloat("colorTemp", colorTemp.value).apply()
     }
 
     fun setShowWeekend(c: Context, on: Boolean) {

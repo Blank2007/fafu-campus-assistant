@@ -1,4 +1,6 @@
 package com.campusglass.ui.settings
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 
 import android.content.Intent
 import android.net.Uri
@@ -83,6 +85,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
+    "v2.21 · 2026-09-30 00:35" to "课程可编辑；连上多节跨行占满多格（冲突左右分栏）；每天上课节数可自定义（选项改为滑动不受截断）；主题色新增小米「色彩风格」（标准/鲜艳/柔和）+ 色温；底栏边框重构（消除模糊毛边+发丝描边）",
     "v2.20 · 2026-09-29 23:55" to "修复添加课程里周几/节次无法选择的 bug（状态不刷新 + 芯片溢出）：改为可观察状态 + 横向滑动选择",
     "v2.19 · 2026-09-29 22:55" to "课表从零重写（修复周几错位等全部旧问题，间距优化）；深色模式黑字问题全局根治（文字颜色统一切题）；检查更新修复（GitHub API 需 User-Agent 导致 403）",
     "v2.18 · 2026-09-29 00:35" to "深色三态（跟随系统/浅色/深色）；课表 bug 修复（周几映射错位/节假日标记找回/学期起始入口）；底栏下拉自动隐藏；检查更新；背景按屏幕尺寸裁切（居中/顶部/底部/适应宽度）并即时刷新；全局亚克力开关；主题色 7 推荐+系统+调色盘自定义；「取件」更名「快递」并与课表换位",
@@ -445,7 +448,7 @@ private fun ColorDot(color: Color, label: String, selected: Boolean, onClick: ()
     }
 }
 
-/** 调色盘：RGB 滑杆自定义主题色 */
+/** 调色盘：色彩风格（小米风格）+ 色温 + RGB 自定义 */
 @Composable
 private fun ColorPickerDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
@@ -453,7 +456,9 @@ private fun ColorPickerDialog(onDismiss: () -> Unit) {
     var r by remember { mutableFloatStateOf(base.red * 255f) }
     var g by remember { mutableFloatStateOf(base.green * 255f) }
     var b by remember { mutableFloatStateOf(base.blue * 255f) }
-    val preview = Color((r.toInt() shl 16) or (g.toInt() shl 8) or b.toInt())
+    var styleState by remember { mutableIntStateOf(ThemePrefs.colorStyle.value) }
+    var tempState by remember { mutableFloatStateOf(ThemePrefs.colorTemp.value) }
+    val preview = com.campusglass.ui.theme.adjustColorStyle(Color((r.toInt() shl 16) or (g.toInt() shl 8) or b.toInt()))
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -467,6 +472,29 @@ private fun ColorPickerDialog(onDismiss: () -> Unit) {
                         .clip(CircleShape)
                         .background(preview)
                 )
+                Text("色彩风格（像小米色彩风格）", style = MaterialTheme.typography.labelSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("标准", "鲜艳", "柔和").forEachIndexed { i, t ->
+                        FilterChip(
+                            selected = styleState == i,
+                            onClick = {
+                                styleState = i
+                                ThemePrefs.setColorStyle(context, i)
+                            },
+                            label = { Text(t) },
+                        )
+                    }
+                }
+                Text("色温（冷 ${if (tempState < 0) "❄" else if (tempState > 0) "🔥" else "—"} 暖）", style = MaterialTheme.typography.labelSmall)
+                Slider(
+                    value = tempState,
+                    onValueChange = {
+                        tempState = it
+                        ThemePrefs.setColorTemp(context, it)
+                    },
+                    valueRange = -20f..20f,
+                )
+                HorizontalDivider()
                 Text("红 ${r.toInt()}", style = MaterialTheme.typography.labelSmall)
                 Slider(value = r, onValueChange = { r = it }, valueRange = 0f..255f)
                 Text("绿 ${g.toInt()}", style = MaterialTheme.typography.labelSmall)
@@ -509,9 +537,9 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("每天上课节数", style = MaterialTheme.typography.labelLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    (4..11).forEach { n ->
+                Text("每天上课节数（点不动就左右滑）", style = MaterialTheme.typography.labelLarge)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items((4..11).toList()) { n ->
                         FilterChip(
                             selected = perDayState == n,
                             onClick = { perDayState = n },
