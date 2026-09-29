@@ -5,7 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -27,7 +28,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -36,6 +36,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -47,27 +48,32 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.campusglass.ui.glass.AcrylicCard
 import com.campusglass.ui.theme.ThemePrefs
 import com.campusglass.ui.widgets.ScreenHeader
 import java.time.LocalDate
 
-/** 高对比课程色块（饱和度高，深色文字保证可读） */
+// ======================= 常量 =======================
+
+/** 高对比课程色块（浅色底 + 黑字，深浅模式下都清晰） */
 private val PALETTE = listOf(
-    Color(0xFF7C9CFF), Color(0xFFFFB74D), Color(0xFF66D9B8), Color(0xFFFF8FA3),
-    Color(0xFFB98CFF), Color(0xFFFFD23F), Color(0xFF5EC8E8), Color(0xFF9CCC65),
-    Color(0xFFFF9E6D), Color(0xFF80CBC4), Color(0xFFE57398), Color(0xFFA5B4FC),
+    Color(0xFF8FA8FF), Color(0xFFFFBC6B), Color(0xFF6FDFC0), Color(0xFFFF9DB0),
+    Color(0xFFC4A0FF), Color(0xFFFFD966), Color(0xFF72D4F0), Color(0xFFAEDD6E),
+    Color(0xFFFFAE82), Color(0xFF8FE0D8), Color(0xFFF08FB4), Color(0xFFB3BEFF),
 )
+
+/** 星期标签（1=周一 … 7=周日） */
+private fun dayLabel(wd: Int) = "周" + "一二三四五六日"[wd - 1]
 
 /** 一周显示顺序：周日起始 */
 private val DAY_ORDER = listOf(7, 1, 2, 3, 4, 5, 6)
-private fun dayLabel(wd: Int) = "周" + "一二三四五六日"[wd - 1]
 
 private data class Slot(var weekday: Int, var start: Int, var end: Int)
 
+// ======================= 主界面 =======================
+
 /**
- * 课表（手动添加模式）：
- * 周日起始 · 一节一行 · 第三行显示教师 · 支持分段周次（2-5,7-8）与同名课多时段。
+ * 课表（全新重写）：
+ * 周日起算 · 一节一行 · 课程块三行（名称/地点/教师）· 分段周次 · 同名多时段。
  */
 @Composable
 fun ScheduleScreen() {
@@ -77,48 +83,52 @@ fun ScheduleScreen() {
     var showAdd by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<Course?>(null) }
 
-    Column(Modifier.fillMaxSize()) {
-        ScreenHeader("课表")
-
-        Text(
-            "当前：第${week}周（周日起算）— 点周次切换，点课程看详情/删除",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-            modifier = Modifier.padding(horizontal = 16.dp),
-        )
-
-        LazyRow(
-            Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            items((1..20).toList()) { w ->
-                FilterChip(
-                    selected = week == w,
-                    onClick = { week = w },
-                    label = { Text("第${w}周") },
+            item { ScreenHeader("课表") }
+
+            item {
+                Text(
+                    "第${week}周（周日起算）· 点周次切换 · 点课程看详情",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                 )
             }
-        }
 
-        Box(Modifier.weight(1f)) {
-            LazyColumn(contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
-                item {
-                    TimetableGrid(courses = courses, week = week, onClick = { detail = it })
-                    HolidayBanner(week)
+            // 周次选择
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items((1..20).toList()) { w ->
+                        FilterChip(
+                            selected = week == w,
+                            onClick = { week = w },
+                            label = { Text("第${w}周") },
+                        )
+                    }
                 }
             }
-            ExtendedFloatingActionButton(
-                onClick = { showAdd = true },
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("添加课程") },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(20.dp),
-            )
+
+            // 节假日
+            item { HolidayBanner(week) }
+
+            // 课表格
+            item {
+                Timetable(courses, week) { detail = it }
+            }
         }
+
+        ExtendedFloatingActionButton(
+            onClick = { showAdd = true },
+            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+            text = { Text("添加课程") },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(20.dp),
+        )
     }
 
     if (showAdd) {
@@ -138,19 +148,32 @@ fun ScheduleScreen() {
             onDismissRequest = { detail = null },
             title = { Text(c.name) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("老师：${c.teacher.ifBlank { "—" }}")
-                    Text("地点：${c.location.ifBlank { "—" }}")
-                    Text("时间：${dayLabel(c.weekday)} 第${c.startPeriod}-${c.endPeriod}节")
-                    Text("周次：" + c.weeks.sorted().joinToString(",") + " 周")
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("老师：${c.teacher.ifBlank { "—" }}", color = MaterialTheme.colorScheme.onSurface)
+                    Text("地点：${c.location.ifBlank { "—" }}", color = MaterialTheme.colorScheme.onSurface)
+                    Text(
+                        "时间：${dayLabel(c.weekday)} 第${c.startPeriod}-${c.endPeriod}节",
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        "周次：" + c.weeks.sorted().joinToString(",") + " 周",
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    courses = courses - c
-                    ScheduleStore.saveCourses(context, courses)
-                    detail = null
-                }) { Text("删除") }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = {
+                        courses = courses - c
+                        ScheduleStore.saveCourses(context, courses)
+                        detail = null
+                    }) { Text("删除该时段") }
+                    TextButton(onClick = {
+                        courses = courses.filterNot { it.name == c.name }
+                        ScheduleStore.saveCourses(context, courses)
+                        detail = null
+                    }) { Text("删除同名全部") }
+                }
             },
             dismissButton = {
                 TextButton(onClick = { detail = null }) { Text("关闭") }
@@ -159,76 +182,85 @@ fun ScheduleScreen() {
     }
 }
 
-/** 周表格：一节一行，周日起始 */
+// ======================= 周表格 =======================
+
 @Composable
-private fun TimetableGrid(courses: List<Course>, week: Int, onClick: (Course) -> Unit) {
+private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Unit) {
     val context = LocalContext.current
     val periods = PeriodTable.periodsPerDay(context)
     val days = if (ThemePrefs.showWeekend.value) DAY_ORDER else listOf(1, 2, 3, 4, 5)
     val todayWd = ScheduleStore.weekdayOf(LocalDate.now())
 
     Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(3.dp)) {
-        Column(Modifier.padding(4.dp)) {
+        Column(Modifier.padding(vertical = 6.dp, horizontal = 4.dp)) {
+            // 表头
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.width(38.dp))
+                Box(Modifier.width(42.dp), contentAlignment = Alignment.Center) {
+                    Text("节", style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface)
+                }
                 days.forEach { wd ->
                     val date = ScheduleStore.dateOf(context, week, wd)
-                    Column(
-                        Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
+                    val today = wd == todayWd
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             dayLabel(wd),
-                            textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.titleSmall,
-                            fontWeight = if (wd == todayWd) FontWeight.Bold else FontWeight.Normal,
-                            color = if (wd == todayWd) MaterialTheme.colorScheme.primary
+                            fontWeight = if (today) FontWeight.Bold else FontWeight.Normal,
+                            color = if (today) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
                             "${date.monthValue}/${date.dayOfMonth}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (wd == todayWd) MaterialTheme.colorScheme.primary
+                            color = if (today) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                         )
                     }
                 }
             }
+
+            // 每节一行
             (1..periods).forEach { p ->
-                Row(Modifier.height(64.dp)) {
+                Row(Modifier.height(74.dp)) {
                     Column(
-                        Modifier.width(38.dp),
+                        Modifier
+                            .width(42.dp)
+                            .fillMaxHeight(),
                         horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
                     ) {
-                        Text("$p", style = MaterialTheme.typography.labelMedium)
+                        Text("$p", style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurface)
                         Text(
                             PeriodTable.startStr(context, p),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                             fontSize = 7.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                         )
                     }
                     days.forEach { wd ->
                         Box(
                             Modifier
                                 .weight(1f)
-                                .height(62.dp)
+                                .fillMaxHeight()
                                 .padding(2.dp)
                                 .background(
-                                    if (wd == todayWd) MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+                                    if (wd == todayWd) MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)
                                     else Color.Transparent,
-                                    RoundedCornerShape(6.dp),
+                                    RoundedCornerShape(8.dp),
                                 )
                         ) {
                             val cell = courses.filter {
                                 it.weekday == wd && it.startPeriod == p && week in it.weeks
                             }
-                            if (cell.size == 1) {
-                                CourseBlock(cell.first(), onClick)
-                            } else if (cell.size > 1) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
-                                    cell.forEach { c ->
-                                        Box(Modifier.weight(1f)) { CourseBlock(c, onClick) }
+                            when (cell.size) {
+                                1 -> CourseBlock(cell.first(), onCourse)
+                                else -> if (cell.size > 1) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                                        cell.forEach { c ->
+                                            Box(Modifier.weight(1f)) { CourseBlock(c, onCourse) }
+                                        }
                                     }
                                 }
                             }
@@ -240,65 +272,94 @@ private fun TimetableGrid(courses: List<Course>, week: Int, onClick: (Course) ->
     }
 }
 
-/** 课程色块：名称/地点/教师 三行，高对比 */
 @Composable
-private fun CourseBlock(c: Course, onClick: (Course) -> Unit) {
-    val span = (c.endPeriod - c.startPeriod + 1).coerceIn(1, 6)
-    val color = PALETTE[(abs(c.name.hashCode() * 31 + c.weekday * 7 + c.startPeriod)) % PALETTE.size]
-    val sc = listOf(0.85f, 1f, 1.2f)[ThemePrefs.scheduleFontScale.value]
+private fun CourseBlock(c: Course, onCourse: (Course) -> Unit) {
+    val span = (c.endPeriod - c.startPeriod + 1).coerceIn(1, 8)
+    val color = PALETTE[(c.name.hashCode() * 31 + c.weekday * 7 + c.startPeriod).let { if (it < 0) -it else it } % PALETTE.size]
+    val scale = listOf(0.85f, 1f, 1.2f)[ThemePrefs.scheduleFontScale.value]
     val base = MaterialTheme.typography.labelSmall
-    val style = base.copy(fontSize = base.fontSize * sc)
+    val style = base.copy(fontSize = base.fontSize * scale)
 
     Card(
-        onClick = { onClick(c) },
-        shape = RoundedCornerShape(6.dp),
+        onClick = { onCourse(c) },
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = color),
         modifier = Modifier
             .fillMaxWidth()
-            .height((62 * span + 2 * (span - 1)).dp),
+            .height((70 * span + 4 * (span - 1)).dp),
     ) {
         Column(
-            Modifier.padding(horizontal = 4.dp, vertical = 3.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp),
+            Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
         ) {
-            Text(
-                c.name,
-                style = style,
-                fontWeight = FontWeight.Bold,
-                color = Color.Black,
-                maxLines = 2,
-            )
+            Text(c.name, style = style, fontWeight = FontWeight.Bold,
+                color = Color.Black, maxLines = 2)
             if (c.location.isNotBlank()) {
-                Text(
-                    c.location,
-                    style = style,
-                    color = Color.Black.copy(alpha = 0.85f),
-                    maxLines = 1,
-                )
+                Text(c.location, style = style, color = Color.Black.copy(alpha = 0.85f), maxLines = 1)
             }
             if (c.teacher.isNotBlank()) {
+                Text(c.teacher, style = style, color = Color.Black.copy(alpha = 0.7f), maxLines = 1)
+            }
+        }
+    }
+}
+
+// ======================= 节假日 =======================
+
+@Composable
+private fun HolidayBanner(week: Int) {
+    val context = LocalContext.current
+    val hits = HolidayData.holidaysInWeek(
+        ScheduleStore.dateOf(context, week, 7),
+        ScheduleStore.dateOf(context, week, 6),
+    )
+    val today = LocalDate.now()
+    val todayHoliday = HolidayData.holidays.firstOrNull { !today.isBefore(it.start) && !today.isAfter(it.end) }
+    val dark = ThemePrefs.themeMode.value == ThemePrefs.ThemeMode.DARK ||
+        (ThemePrefs.themeMode.value == ThemePrefs.ThemeMode.SYSTEM &&
+            androidx.compose.foundation.isSystemInDarkTheme())
+
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (hits.isEmpty()) MaterialTheme.colorScheme.surfaceVariant
+            else if (dark) Color(0xFF5A4A20) else Color(0xFFFFF3D6)
+        ),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            if (hits.isEmpty()) {
                 Text(
-                    c.teacher,
-                    style = style,
-                    color = Color.Black.copy(alpha = 0.75f),
-                    maxLines = 1,
+                    "本周无假期" + if (todayHoliday != null) " · 今天是【${todayHoliday.name}】🎉" else "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            } else {
+                Text(
+                    "🏖 本周期间假期：" + hits.joinToString("、"),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    "假期参考（以学校校历为准）" + if (todayHoliday != null) " · 今天【${todayHoliday.name}】🎉" else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                 )
             }
         }
     }
 }
 
-private fun abs(v: Int) = if (v < 0) -v else v
+// ======================= 添加课程 =======================
 
-/** 添加课程弹窗：同名多时段 · 分段周次 */
 @Composable
 private fun AddCourseDialog(onDismiss: () -> Unit, onSave: (List<Course>) -> Unit) {
     var name by remember { mutableStateOf("") }
     var teacher by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
-    val slots = remember { mutableStateOf(mutableListOf(Slot(1, 1, 2))) }
+    val slots = remember { mutableStateListOf(Slot(1, 1, 2)) }
     var weeksText by remember { mutableStateOf("1-16") }
-    var parity by remember { mutableIntStateOf(0) }   // 0全部 1单 2双
+    var parity by remember { mutableIntStateOf(0) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -306,64 +367,71 @@ private fun AddCourseDialog(onDismiss: () -> Unit, onSave: (List<Course>) -> Uni
         text = {
             Column(
                 Modifier
-                    .height(460.dp)
+                    .height(480.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), singleLine = true,
                     label = { Text("课程名（必填）") })
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(teacher, { teacher = it }, Modifier.weight(1f), singleLine = true,
                         label = { Text("老师") })
                     OutlinedTextField(location, { location = it }, Modifier.weight(1f), singleLine = true,
                         label = { Text("教室") })
                 }
 
-                Text("🕐 上课时间（同一门课可加多个时段）", style = MaterialTheme.typography.labelLarge)
-                slots.value.forEachIndexed { i, slot ->
-                    AcrylicCard(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("🕐 上课时间（可添加多个时段）", style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface)
+
+                slots.forEachIndexed { i, slot ->
+                    Card(
+                        Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                        ),
+                    ) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(
                                 Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text("时段 ${i + 1}", style = MaterialTheme.typography.labelLarge)
-                                if (slots.value.size > 1) {
-                                    IconButton(onClick = { slots.value.removeAt(i); slots.value = slots.value.toMutableList() }) {
-                                        Icon(Icons.Filled.Delete, contentDescription = "删除时段")
-                                    }
+                                Text("时段 ${i + 1}", style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurface)
+                                if (slots.size > 1) {
+                                    TextButton(onClick = { slots.removeAt(i) }) { Text("删除") }
                                 }
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 listOf(7, 1, 2, 3, 4, 5, 6).forEach { wd ->
                                     FilterChip(
                                         selected = slot.weekday == wd,
-                                        onClick = { slot.weekday = wd; slots.value = slots.value.toMutableList() },
+                                        onClick = { slot.weekday = wd },
                                         label = { Text(dayLabel(wd), fontSize = 10.sp) },
                                     )
                                 }
                             }
-                            Text("起始节", style = MaterialTheme.typography.labelSmall)
-                            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text("起始节", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface)
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 (1..11).forEach { p ->
                                     FilterChip(
                                         selected = slot.start == p,
                                         onClick = {
                                             slot.start = p
                                             if (slot.end < p) slot.end = p
-                                            slots.value = slots.value.toMutableList()
                                         },
                                         label = { Text("$p", fontSize = 11.sp) },
                                     )
                                 }
                             }
-                            Text("结束节", style = MaterialTheme.typography.labelSmall)
-                            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text("结束节", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface)
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 (slot.start..11).forEach { p ->
                                     FilterChip(
                                         selected = slot.end == p,
-                                        onClick = { slot.end = p; slots.value = slots.value.toMutableList() },
+                                        onClick = { slot.end = p },
                                         label = { Text("$p", fontSize = 11.sp) },
                                     )
                                 }
@@ -372,14 +440,15 @@ private fun AddCourseDialog(onDismiss: () -> Unit, onSave: (List<Course>) -> Uni
                     }
                 }
                 OutlinedButton(
-                    onClick = { slots.value.add(Slot(1, 1, 2)); slots.value = slots.value.toMutableList() },
+                    onClick = { slots.add(Slot(1, 1, 2)) },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("＋ 添加上课时间") }
 
-                Text("📅 周次（支持分段，如 2-5,7-8）", style = MaterialTheme.typography.labelLarge)
+                Text("📅 周次（支持分段，如 2-5,7-8）", style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface)
                 OutlinedTextField(weeksText, { weeksText = it }, Modifier.fillMaxWidth(), singleLine = true,
                     label = { Text("周次范围") })
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("全部周", "单周", "双周").forEachIndexed { i, t ->
                         FilterChip(selected = parity == i, onClick = { parity = i }, label = { Text(t) })
                     }
@@ -399,7 +468,7 @@ private fun AddCourseDialog(onDismiss: () -> Unit, onSave: (List<Course>) -> Uni
                             }
                         }.toSet().ifEmpty { (1..16).toSet() }
                     onSave(
-                        slots.value.map { s ->
+                        slots.map { s ->
                             Course(
                                 name = name.trim(),
                                 teacher = teacher.trim(),
@@ -418,44 +487,4 @@ private fun AddCourseDialog(onDismiss: () -> Unit, onSave: (List<Course>) -> Uni
             TextButton(onClick = onDismiss) { Text("取消") }
         },
     )
-}
-
-/** 本周期间假期标记（周日起算） */
-@Composable
-private fun HolidayBanner(week: Int) {
-    val context = LocalContext.current
-    val weekStart = ScheduleStore.dateOf(context, week, 7)   // 周日
-    val weekEnd = ScheduleStore.dateOf(context, week, 6)     // 周六
-    val hits = HolidayData.holidaysInWeek(weekStart, weekEnd)
-    val today = LocalDate.now()
-    val todayHoliday = HolidayData.holidays.firstOrNull { !today.isBefore(it.start) && !today.isAfter(it.end) }
-    Card(
-        Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (hits.isEmpty()) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            else Color(0xFFFFF3D6)
-        ),
-    ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            if (hits.isEmpty()) {
-                Text(
-                    "本周无假期标记" + if (todayHoliday != null) "（今天：${todayHoliday.name} 🎉）" else "",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            } else {
-                Text(
-                    "🏖 本周期间假期：" + hits.joinToString("、"),
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    "假期参考（以学校校历为准）" + if (todayHoliday != null) " · 今天：${todayHoliday.name} 🎉" else "",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                )
-            }
-        }
-    }
 }

@@ -83,6 +83,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
+    "v2.19 · 2026-09-29 22:55" to "课表从零重写（修复周几错位等全部旧问题，间距优化）；深色模式黑字问题全局根治（文字颜色统一切题）；检查更新修复（GitHub API 需 User-Agent 导致 403）",
     "v2.18 · 2026-09-29 00:35" to "深色三态（跟随系统/浅色/深色）；课表 bug 修复（周几映射错位/节假日标记找回/学期起始入口）；底栏下拉自动隐藏；检查更新；背景按屏幕尺寸裁切（居中/顶部/底部/适应宽度）并即时刷新；全局亚克力开关；主题色 7 推荐+系统+调色盘自定义；「取件」更名「快递」并与课表换位",
     "v2.17 · 2026-09-28 23:59" to "课表大改版：周日起算、一节一行、教师行、分段周次、多时段、高对比色块、添加界面重做；节次时间/每天节数自定义；全局亚克力；安全区适配；拼多多入口精简",
     "v2.16 · 2026-09-28 23:35" to "深色模式开关；悬浮亚克力底栏；异形屏适配；公交站点竖排；快递多公司兼容；微信身份码自动进入；背景只留自定义；个性化；日志精确到分钟",
@@ -554,19 +555,32 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
     )
 }
 
-/** 检查更新：读 GitHub Releases 最新版 */
-private fun checkUpdate(): String = runCatching {
-    val conn = URL("https://api.github.com/repos/Blank2007/fafu-campus-assistant/releases/latest")
-        .openConnection() as HttpURLConnection
-    conn.connectTimeout = 8000
-    conn.readTimeout = 8000
-    conn.setRequestProperty("Accept", "application/vnd.github+json")
-    val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-    val latest = json.optString("tag_name", "").removePrefix("v")
-    val current = BuildConfig.VERSION_NAME
-    when {
-        latest.isBlank() -> "没获取到版本信息，请稍后再试"
-        latest == current -> "已是最新版本（v$current）✅"
-        else -> "发现新版本 v$latest（当前 v$current）！点「去下载」更新"
+/** 检查更新：读 GitHub Releases 最新版（带 User-Agent + 重试；GitHub API 强制要求 UA） */
+private fun checkUpdate(): String {
+    val url = "https://api.github.com/repos/Blank2007/fafu-campus-assistant/releases/latest"
+    var lastErr = ""
+    repeat(2) {
+        runCatching {
+            val conn = URL(url).openConnection() as HttpURLConnection
+            conn.connectTimeout = 12_000
+            conn.readTimeout = 12_000
+            conn.requestMethod = "GET"
+            conn.setRequestProperty("User-Agent", "FAFU-Campus-Assistant/2.19")   // GitHub API 必须带
+            conn.setRequestProperty("Accept", "application/vnd.github+json")
+            val code = conn.responseCode
+            if (code != 200) {
+                lastErr = "HTTP $code"
+                return@runCatching
+            }
+            val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
+            val latest = json.optString("tag_name", "").removePrefix("v")
+            val current = BuildConfig.VERSION_NAME
+            return when {
+                latest.isBlank() -> "没获取到版本信息，请稍后再试"
+                latest == current -> "已是最新版本（v$current）✅"
+                else -> "发现新版本 v$latest（当前 v$current）！点「去下载」更新"
+            }
+        }.onFailure { lastErr = it.message ?: "网络异常" }
     }
-}.getOrElse { "检查失败：" + (it.message ?: "网络异常") }
+    return "检查失败：$lastErr（可能是网络不畅，可直接点「打开下载页」查看）"
+}

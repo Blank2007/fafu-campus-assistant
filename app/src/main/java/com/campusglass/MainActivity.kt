@@ -63,6 +63,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.unit.dp
 import com.campusglass.bus.BusScreen
 import com.campusglass.pickup.PickupScreen
@@ -127,7 +128,10 @@ fun CampusGlassApp() {
     Box(Modifier.fillMaxSize()) {
         AppBackground(glass)
 
-        CompositionLocalProvider(LocalGlass provides glass) {
+        CompositionLocalProvider(
+            LocalGlass provides glass,
+            LocalContentColor provides MaterialTheme.colorScheme.onSurface,
+        ) {
             Scaffold(
                 containerColor = Color.Transparent,
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
