@@ -1,9 +1,9 @@
 package com.campusglass.pickup
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.content.Intent
 import android.widget.Toast
 
 /**
@@ -17,6 +17,11 @@ import android.widget.Toast
  *    scheme：pinduoduo://com.xunmeng.pinduoduo/scan.html（扫一扫）、index.html?...（个人中心）
  *  - 支付宝·菜鸟小程序：alipays://platformapi/startapp?appId=2021001141626787（打开即取件码，
  *    V2EX 讨论实测可用；按需求不拉起菜鸟 App，走支付宝）
+ *
+ * v3.3 修复：
+ *  - 未安装目标 App 时不再“点了没反应”：明确提示，并说明下一步怎么做；
+ *  - 拼多多 scheme 被屏蔽时真正走 Activity 探测兜底（旧版兜底代码从未被调用）；
+ *  - isInstalled 在 Android 12/12L 上不再因 PackageInfoFlags(API 33) 崩溃。
  */
 object AppJump {
 
@@ -33,28 +38,34 @@ object AppJump {
     const val ALIPAY_CAINIAO = "alipays://platformapi/startapp?appId=2021001141626787"
 
     fun isInstalled(context: Context, pkg: String): Boolean = try {
-        context.packageManager.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0))
+        val pm = context.packageManager
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0))
+        } else {
+            @Suppress("DEPRECATION")
+            pm.getPackageInfo(pkg, 0)
+        }
         true
     } catch (_: Exception) {
         false
     }
 
     /** 拼多多 · 扫一扫直达身份码流程（驿站现场扫墙上二维码最短路径） */
-    fun openPddScan(context: Context) = jumpChain(
+    fun openPddScan(context: Context) = openPdd(
         context,
         listOf(PDD_SCAN, PDD_PERSONAL, PDD_HOME),
-        PDD_PKG,
+        "已打开拼多多，请点「扫一扫」扫驿站二维码",
     )
 
     /** 拼多多 · 个人中心（进“多多买菜→自提服务→我的身份码”） */
-    fun openPddPersonal(context: Context) = jumpChain(
+    fun openPddPersonal(context: Context) = openPdd(
         context,
         listOf(PDD_PERSONAL, PDD_HOME),
-        PDD_PKG,
+        "已打开拼多多首页，请按提示进入：个人中心 → 多多买菜 → 自提服务 → 我的身份码",
     )
 
     /** 拼多多 · 首页 */
-    fun openPddHome(context: Context) = jumpChain(context, listOf("pinduoduo://", PDD_HOME), PDD_PKG)
+    fun openPddHome(context: Context) = openPdd(context, listOf("pinduoduo://", PDD_HOME), "已打开拼多多")
 
     const val WECHAT_PKG = "com.tencent.mm"
 
@@ -84,71 +95,147 @@ object AppJump {
             } else false
         }.getOrDefault(false)
         if (launched) {
-            android.widget.Toast.makeText(
+            Toast.makeText(
                 context,
                 "链接已复制：在微信里发给「文件传输助手」并点击，直达身份码",
-                android.widget.Toast.LENGTH_LONG,
+                Toast.LENGTH_LONG,
             ).show()
-        } else {
-            // 没装微信 → 浏览器试开
-            runCatching {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(PDD_WECHAT_PACKAGE_URL))
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-            }
+        } else if (!openInBrowser(context, PDD_WECHAT_PACKAGE_URL)) {
+            Toast.makeText(context, "未安装微信，且无法打开浏览器", Toast.LENGTH_SHORT).show()
         }
     }
 
     /** 浏览器直接试开（部分环境不走微信也能进） */
     fun openPddWeChatInBrowser(context: Context) =
-        jumpChain(context, listOf(PDD_WECHAT_PACKAGE_URL), PDD_PKG)
+        openPdd(context, listOf(PDD_WECHAT_PACKAGE_URL), "已用浏览器打开身份码链接")
 
     /** 直接跳指定 URI（嗅探出的真实路由用） */
-    fun openUri(context: Context, uri: String, pkg: String) = jumpChain(context, listOf(uri), pkg)
+    fun openUri(context: Context, uri: String, pkg: String) =
+        jumpChain(context, listOf(uri), pkg, "已尝试打开目标页面")
 
     /** 支付宝 · 菜鸟取件码（失败回退：支付宝首页 → 应用市场） */
-    fun openAlipayCainiao(context: Context) = jumpChain(
-        context,
-        listOf(ALIPAY_CAINIAO, "alipays://platformapi/startapp?appId=20000067"),
-        ALIPAY_PKG,
-    )
+    fun openAlipayCainiao(context: Context) {
+        if (!isInstalled(context, ALIPAY_PKG)) {
+            Toast.makeText(
+                context,
+                "未安装支付宝，无法直达菜鸟取件码（可在支付宝里搜索「菜鸟」小程序）",
+                Toast.LENGTH_LONG,
+            ).show()
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$ALIPAY_PKG"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+            return
+        }
+        jumpChain(
+            context,
+            listOf(ALIPAY_CAINIAO, "alipays://platformapi/startapp?appId=20000067"),
+            ALIPAY_PKG,
+            "已打开支付宝，请进入「菜鸟」小程序看取件码",
+        )
+    }
 
-    private fun jumpChain(context: Context, uris: List<String>, pkg: String) {
+    /** 拼多多统一入口：未安装 → 提示；scheme 拉起 → 探测取件页 → 首页兜底 */
+    private fun openPdd(context: Context, uris: List<String>, homeHint: String) {
+        if (!isInstalled(context, PDD_PKG)) {
+            Toast.makeText(
+                context,
+                "未安装拼多多，无法直达身份码页（可先安装拼多多，或用微信入口）",
+                Toast.LENGTH_LONG,
+            ).show()
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$PDD_PKG"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+            return
+        }
+        // 1) scheme 直达（新版拼多多可能已屏蔽，失败会自动往下走）
+        if (jumpChain(context, uris, PDD_PKG, homeHint, silent = true)) return
+        // 2) Activity 层探测取件/扫码页
+        if (PddLauncher.tryDeepLink(context, PDD_PKG)) {
+            Toast.makeText(context, homeHint, Toast.LENGTH_LONG).show()
+            return
+        }
+        // 3) 首页兜底 + 引导
+        if (PddLauncher.openApp(context, PDD_PKG)) {
+            Toast.makeText(context, homeHint, Toast.LENGTH_LONG).show()
+        } else {
+            Toast.makeText(context, "未能打开拼多多，请手动打开后再进入身份码页面", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /**
+     * 依次尝试 scheme 跳转。
+     * @param silent true 时不弹提示（由调用方决定最终提示），返回是否成功发起跳转
+     */
+    private fun jumpChain(
+        context: Context,
+        uris: List<String>,
+        pkg: String,
+        hint: String,
+        silent: Boolean = false,
+    ): Boolean {
         for (uri in uris) {
             // 1) 指定包名的 ACTION_VIEW（最精准）
-            runCatching {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(uri))
-                        .setPackage(pkg)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-                return
+            if (runCatching {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+                            .setPackage(pkg)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                }.isSuccess
+            ) {
+                if (!silent) Toast.makeText(context, hint, Toast.LENGTH_LONG).show()
+                return true
             }
             // 2) 不限包名（部分 ROM 对 scheme 解析更宽松）
-            runCatching {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(uri))
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-                return
+            if (runCatching {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                }.isSuccess
+            ) {
+                if (!silent) Toast.makeText(context, hint, Toast.LENGTH_LONG).show()
+                return true
             }
         }
         // 3) 按包名拉起首页
-        runCatching {
-            context.packageManager.getLaunchIntentForPackage(pkg)?.let {
-                context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                return
+        context.packageManager.getLaunchIntentForPackage(pkg)?.let { launch ->
+            if (runCatching {
+                    context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }.isSuccess
+            ) {
+                if (!silent) Toast.makeText(context, hint, Toast.LENGTH_LONG).show()
+                return true
             }
         }
         // 4) 应用市场兜底
-        runCatching {
-            context.startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg"))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-        }.onFailure {
+        if (runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }.isSuccess
+        ) {
+            if (!silent) {
+                Toast.makeText(context, "未安装该应用，已跳转应用市场", Toast.LENGTH_SHORT).show()
+            }
+            return true
+        }
+        if (!silent) {
             Toast.makeText(context, "未安装该应用，且无法打开应用市场", Toast.LENGTH_SHORT).show()
         }
+        return false
     }
+
+    private fun openInBrowser(context: Context, url: String): Boolean = runCatching {
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+    }.isSuccess
 }

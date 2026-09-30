@@ -24,6 +24,9 @@ data class Course(
 /**
  * 节次作息（可在设置里逐节修改上课/结束时间；每天节数可自定义）。
  * 默认作息：福建农林大学金山/南平校区常规。
+ *
+ * v3.3 修复：`all()` 不再过滤“不含 - 的条目”，避免一条异常数据让后面所有节次错位；
+ * 新增 reset() 以便“恢复默认作息”。
  */
 object PeriodTable {
 
@@ -36,18 +39,40 @@ object PeriodTable {
     /** 每天最多节数（用户可自定义 1-24） */
     const val MAX_PERIODS = 24
 
+    /** 未设置时的占位（不要用 LocalTime.parse 去解析它） */
+    const val UNSET = "未设置"
+
+    private const val UNSET_RANGE = "$UNSET-$UNSET"
+
     private fun prefs(c: Context) = c.getSharedPreferences("schedule", Context.MODE_PRIVATE)
 
-    /** 返回每节 "HH:mm-HH:mm"（用户可改），最多 24 节 */
+    /** 返回每节 "HH:mm-HH:mm"（用户可改），固定 24 条且下标与节次一一对应 */
     fun all(c: Context): List<String> {
         val saved = prefs(c).getString("periodTimes", null)
-        val list = saved?.split(",")?.filter { it.contains("-") } ?: emptyList()
-        val base = list + DEFAULT_TIMES.drop(list.size) + List(MAX_PERIODS) { "未设置-未设置" }
-        return base.take(MAX_PERIODS)
+        val raw = saved?.split(",")?.map { it.trim() } ?: emptyList()
+        val out = ArrayList<String>(MAX_PERIODS)
+        for (i in 0 until MAX_PERIODS) {
+            val v = raw.getOrNull(i)
+            out += when {
+                v == null -> if (i < DEFAULT_TIMES.size) DEFAULT_TIMES[i] else UNSET_RANGE
+                v.isBlank() -> UNSET_RANGE
+                v.contains("-") -> v
+                else -> "$v-$UNSET"
+            }
+        }
+        return out
     }
 
     fun save(c: Context, times: List<String>) {
         prefs(c).edit().putString("periodTimes", times.take(MAX_PERIODS).joinToString(",")).apply()
+    }
+
+    /** 恢复默认作息与默认每天节数 */
+    fun reset(c: Context) {
+        prefs(c).edit()
+            .remove("periodTimes")
+            .putInt("periodsPerDay", DEFAULT_TIMES.size)
+            .apply()
     }
 
     fun startStr(c: Context, p: Int): String =
@@ -55,6 +80,19 @@ object PeriodTable {
 
     fun endStr(c: Context, p: Int): String =
         all(c)[(p - 1).coerceIn(0, MAX_PERIODS - 1)].substringAfter("-")
+
+    /** 是否是一个可用的 "HH:mm-HH:mm"（允许保留「未设置-未设置」占位） */
+    fun isValidRange(v: String): Boolean {
+        val s = v.substringBefore("-").trim()
+        val e = v.substringAfter("-", "").trim()
+        if (s == UNSET && e == UNSET) return true
+        if (!isValidTime(s) || !isValidTime(e)) return false
+        val start = LocalTime.parse(s)
+        val end = LocalTime.parse(e)
+        return !end.isBefore(start)
+    }
+
+    fun isValidTime(v: String): Boolean = runCatching { LocalTime.parse(v.trim()) }.isSuccess
 
     /** 每天节数（自定义 1-24，不再被默认课表长度卡死） */
     fun periodsPerDay(c: Context): Int =
@@ -64,13 +102,17 @@ object PeriodTable {
         prefs(c).edit().putInt("periodsPerDay", n.coerceIn(1, MAX_PERIODS)).apply()
     }
 
-    /** 由开始时间反查最接近的节次（ICS 备用） */
+    /**
+     * 由开始时间反查最接近的节次（ICS 备用）。
+     * 修复：遇到底部占位「未设置」时不再抛异常，最多返回 1。
+     */
     fun periodOfTime(c: Context, t: LocalTime): Int {
-        val times = all(c).map {
-            LocalTime.parse(it.substringBefore("-")) to LocalTime.parse(it.substringAfter("-"))
+        all(c).forEachIndexed { idx, v ->
+            val start = runCatching { LocalTime.parse(v.substringBefore("-").trim()) }.getOrNull() ?: return@forEachIndexed
+            val end = runCatching { LocalTime.parse(v.substringAfter("-", "").trim()) }.getOrNull() ?: return@forEachIndexed
+            if (!start.isAfter(t) && !end.isBefore(t)) return idx + 1
         }
-        return times.indexOfFirst { !it.first.isAfter(t) && !it.second.isBefore(t) }
-            .let { if (it >= 0) it + 1 else 1 }
+        return 1
     }
 }
 
@@ -79,22 +121,34 @@ object ScheduleStore {
     private val DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     private fun prefs(c: Context) = c.getSharedPreferences("schedule", Context.MODE_PRIVATE)
 
-    fun loadCourses(c: Context): List<Course> = runCatching {
-        val arr = JSONArray(prefs(c).getString("courses", "[]"))
-        (0 until arr.length()).map { i ->
-            val o = arr.getJSONObject(i)
-            Course(
-                id = o.optString("id", UUID.randomUUID().toString()),
-                name = o.getString("name"),
+    /**
+     * 读取课程表。
+     * 修复：逐条解析 + 逐条容错 —— 旧版只要有一条数据异常（缺 name、类型不对）就整表变空。
+     */
+    fun loadCourses(c: Context): List<Course> {
+        val raw = prefs(c).getString("courses", "[]") ?: "[]"
+        val arr = runCatching { JSONArray(raw) }.getOrNull() ?: return emptyList()
+        val out = ArrayList<Course>(arr.length())
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val name = o.optString("name").trim()
+            if (name.isEmpty()) continue
+            val weekday = o.optInt("weekday", 1).let { if (it in 1..7) it else 1 }
+            val start = o.optInt("start", 1).coerceIn(1, PeriodTable.MAX_PERIODS)
+            val end = o.optInt("end", start).coerceIn(start, PeriodTable.MAX_PERIODS)
+            out += Course(
+                id = o.optString("id").ifBlank { UUID.randomUUID().toString() },
+                name = name,
                 teacher = o.optString("teacher"),
                 location = o.optString("location"),
-                weekday = o.getInt("weekday"),
-                startPeriod = o.getInt("start"),
-                endPeriod = o.getInt("end"),
+                weekday = weekday,
+                startPeriod = start,
+                endPeriod = end,
                 weeks = parseWeeks(o.optString("weeks")),
             )
         }
-    }.getOrDefault(emptyList())
+        return out
+    }
 
     fun saveCourses(c: Context, courses: List<Course>) {
         val arr = JSONArray()
@@ -154,5 +208,21 @@ object ScheduleStore {
                 else -> true
             }
         }.toSet()
+    }
+
+    /** 周次格式化：把连续周压缩成区间（如 1-16 / 2-5,7-8），用于编辑框回填与详情展示 */
+    fun formatWeeks(weeks: Set<Int>): String {
+        val sorted = weeks.sorted()
+        if (sorted.isEmpty()) return ""
+        val sb = StringBuilder()
+        var i = 0
+        while (i < sorted.size) {
+            var j = i
+            while (j + 1 < sorted.size && sorted[j + 1] == sorted[j] + 1) j++
+            if (sb.isNotEmpty()) sb.append(",")
+            sb.append(if (i == j) "${sorted[i]}" else "${sorted[i]}-${sorted[j]}")
+            i = j + 1
+        }
+        return sb.toString()
     }
 }

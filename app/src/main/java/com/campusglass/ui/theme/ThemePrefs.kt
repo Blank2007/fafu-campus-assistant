@@ -5,11 +5,17 @@ import android.content.Context
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 
 /**
  * 外观与个性化偏好（设置页可改，持久化）：
  * 主题模式（跟随系统/浅色/深色）· 主题色（7推荐+系统+自定义调色盘）·
  * 亚克力开关 · 自定义背景（含裁切模式）· 课表字号/周末列。
+ *
+ * v3.3 修复：自定义主题色统一按 ARGB Int 存取。
+ * 旧版 `putLong("customColor", color.value.toLong())` 存的是 Color 的打包值，
+ * 读取却用 `Color(Long)`（该重载会把低 32 位当作 AARRGGBB 再左移 32），
+ * sRGB 打包值低 32 位恒为 0 → 重启后自定义色必然变成透明黑。旧键直接忽略。
  */
 object ThemePrefs {
 
@@ -42,6 +48,9 @@ object ThemePrefs {
         "粉" to Color(0xFFE91E63),
     )
 
+    // 不是 const：0xFF3B5BFF 是 Long 字面量，需要 toInt() 才能得到 ARGB 位模式
+    private val DEFAULT_CUSTOM_ARGB = 0xFF3B5BFF.toInt()
+
     private fun prefs(c: Context) = c.getSharedPreferences("ui_prefs", Context.MODE_PRIVATE)
 
     fun load(c: Context) {
@@ -51,7 +60,8 @@ object ThemePrefs {
         }.getOrDefault(ThemeMode.SYSTEM)
         acrylicEnabled.value = p.getBoolean("acrylic", true)
         themeColorIndex.value = p.getInt("colorIdx", 0).coerceIn(0, 8)
-        customColor.value = Color(p.getLong("customColor", 0xFF3B5BFF))
+        // 只认新的 ARGB Int 键；旧键（打包 ULong）写进去的值本身就是坏的
+        customColor.value = Color(p.getInt("customColorArgb", DEFAULT_CUSTOM_ARGB))
         colorStyle.value = p.getInt("colorStyle", 0).coerceIn(0, 2)
         colorTemp.value = p.getFloat("colorTemp", 0f).coerceIn(-20f, 20f)
         bgImagePath.value = p.getString("bgImage", "") ?: ""
@@ -77,12 +87,15 @@ object ThemePrefs {
         prefs(c).edit().putInt("colorIdx", themeColorIndex.value).apply()
     }
 
+    /** color 必须是 0xFFRRGGBB（不透明）的原始自定义色；色彩风格/色温在渲染时统一应用一次 */
     fun setCustomColor(c: Context, color: Color) {
-        customColor.value = color
+        val argb = color.toArgb()
+        customColor.value = Color(argb)
         themeColorIndex.value = 8
         prefs(c).edit()
-            .putLong("customColor", color.value.toLong())
+            .putInt("customColorArgb", argb)
             .putInt("colorIdx", 8)
+            .remove("customColor")
             .apply()
     }
 

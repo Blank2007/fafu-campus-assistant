@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 深色模式（系统夜间）：启动窗口 / 系统 Splash 使用深色底。
+         v3.3 新增：旧版只有一套浅色主题，深色模式下每次冷启动都会先闪一下白屏。 -->
+    <style name="Theme.CampusGlass" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:windowActivityTransitions">true</item>
+        <item name="android:windowBackground">#FF10121A</item>
+    </style>
+</resources>

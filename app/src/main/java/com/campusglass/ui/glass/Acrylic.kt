@@ -4,6 +4,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -27,18 +28,35 @@ import dev.chrisbanes.haze.blur.HazeColorEffect
 import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
-import androidx.compose.foundation.border
+import java.io.File
 
 /**
  * 亚克力（Acrylic）材质体系。
  * - 有自定义背景图时：全局卡片/栏位使用亚克力模糊（看得见背后图片）
  * - 无自定义背景（默认纯色）：自动退回普通不透明卡片（默认不用亚克力）
+ *
+ * v3.3：`hasCustomBackground()` 同时判断图片文件是否存在（旧版只看路径非空，
+ * 图片被清理后卡片仍是半透明，压在纯色底上很脏）；亚克力 tint 改为由主题 surface 推导。
  */
 
 val LocalGlass = staticCompositionLocalOf<HazeState?> { null }
 
 @Composable
 fun rememberGlassState(): HazeState = rememberHazeState()
+
+/** 是否真的设置了可用的自定义背景图 */
+fun hasCustomBackground(): Boolean {
+    val p = ThemePrefs.bgImagePath.value
+    return p.isNotBlank() && File(p).exists()
+}
+
+/** 当前 App 主题是否深色 */
+@Composable
+fun isAppInDarkTheme(): Boolean = when (ThemePrefs.themeMode.value) {
+    ThemePrefs.ThemeMode.DARK -> true
+    ThemePrefs.ThemeMode.LIGHT -> false
+    ThemePrefs.ThemeMode.SYSTEM -> isSystemInDarkTheme()
+}
 
 /** 标记"玻璃背后的背景层" */
 fun Modifier.glassBackground(state: HazeState): Modifier = this.hazeSource(state)
@@ -49,13 +67,14 @@ fun Modifier.acrylic(
     dark: Boolean,
     blurRadius: Dp = 26.dp,
     shape: Shape = RoundedCornerShape(26.dp),
+    tint: Color? = null,
 ): Modifier {
-    val tint = if (dark) Color(0x9920222C) else Color(0xCCFFFFFF)
+    val resolvedTint = tint ?: if (dark) Color(0x9920222C) else Color(0xCCFFFFFF)
     val style = HazeBlurStyle {
         blurEnabled(true)
         blurRadius(blurRadius)
         noiseFactor(0.05f)
-        colorEffects(listOf(HazeColorEffect.tint(tint)))
+        colorEffects(listOf(HazeColorEffect.tint(resolvedTint)))
     }
     return this
         .graphicsLayer(shape = shape, clip = true)   // 圆角裁切层包住模糊（背板四角必定圆滑）
@@ -85,15 +104,16 @@ fun AcrylicCard(
     content: @Composable () -> Unit,
 ) {
     val glass = LocalGlass.current
-    val customBg = ThemePrefs.bgImagePath.value.isNotBlank()
-    val dark = when (ThemePrefs.themeMode.value) {
-        ThemePrefs.ThemeMode.DARK -> true
-        ThemePrefs.ThemeMode.LIGHT -> false
-        ThemePrefs.ThemeMode.SYSTEM -> isSystemInDarkTheme()
-    }
-    if (glass != null && customBg && ThemePrefs.acrylicEnabled.value) {
+    val dark = isAppInDarkTheme()
+    if (glass != null && hasCustomBackground() && ThemePrefs.acrylicEnabled.value) {
         Surface(
-            modifier = modifier.acrylic(glass, dark, blurRadius = 22.dp, shape = shape),
+            modifier = modifier.acrylic(
+                glass,
+                dark,
+                blurRadius = 22.dp,
+                shape = shape,
+                tint = MaterialTheme.colorScheme.surface.copy(alpha = if (dark) 0.74f else 0.80f),
+            ),
             shape = shape,
             color = Color.Transparent,
             content = content,

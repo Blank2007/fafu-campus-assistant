@@ -8,6 +8,12 @@ import android.content.pm.PackageManager
  * 通用页面探测器：枚举目标 App 注册的 Activity，按关键词打分，
  * 用于直达“订单/个人中心/取件”等页面。逐个尝试、拉不起来自动跳过，
  * 不依赖容易失效的私有 scheme（无效链接自然被过滤）。
+ *
+ * v3.3 修复：
+ *  - 查询 Activity 列表必须带 GET_ACTIVITIES，旧版传 0 导致 activities 恒为 null，
+ *    整个探测功能实际从不工作；
+ *  - PackageInfoFlags 是 API 33 才有的类型，minSdk 31 上会 NoClassDefFoundError，
+ *    这里按版本分流（33+ 用新 API，31/32 用旧 API）。
  */
 object AppPageFinder {
 
@@ -30,16 +36,24 @@ object AppPageFinder {
     )
 
     fun find(context: Context, pkg: String, weights: List<Pair<String, Int>>): List<Candidate> =
-        runCatching {
-            val info = context.packageManager.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0))
-            (info.activities ?: return emptyList())
-                .map { it.name }
-                .distinct()
-                .sortedByDescending { score(it, weights) }
-                .filter { score(it, weights) > 0 }
-                .take(8)
-                .map { Candidate(it.substringAfterLast('.'), it) }
-        }.getOrDefault(emptyList())
+        activitiesOf(context, pkg)
+            .distinct()
+            .sortedByDescending { score(it, weights) }
+            .filter { score(it, weights) > 0 }
+            .take(8)
+            .map { Candidate(it.substringAfterLast('.'), it) }
+
+    /** 读取目标包已注册的 Activity 名（必须带 GET_ACTIVITIES，否则 PackageInfo.activities 为 null） */
+    private fun activitiesOf(context: Context, pkg: String): List<String> = runCatching {
+        val pm = context.packageManager
+        val info = if (android.os.Build.VERSION.SDK_INT >= 33) {
+            pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(PackageManager.GET_ACTIVITIES.toLong()))
+        } else {
+            @Suppress("DEPRECATION")
+            pm.getPackageInfo(pkg, PackageManager.GET_ACTIVITIES)
+        }
+        info.activities?.map { it.name } ?: emptyList()
+    }.getOrDefault(emptyList())
 
     private fun score(className: String, weights: List<Pair<String, Int>>): Int {
         val s = className.lowercase()

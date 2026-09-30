@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Light 基底 + 禁止系统强制深色（由 Compose 自行适配深色模式，
-         避免 force-dark 把已经做好的深色配色反色） -->
+         避免 force-dark 把已经做好的深色配色反色）
+         v3.3：补 windowBackground（浅色底），配合 values-night/themes.xml 一起，
+         让 Android 12+ 的启动 Splash / 启动窗口在深色模式下不再闪白。 -->
     <style name="Theme.CampusGlass" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:forceDarkAllowed">false</item>
         <item name="android:windowActivityTransitions">true</item>
+        <item name="android:windowBackground">#FFEEF2FC</item>
     </style>
 </resources>

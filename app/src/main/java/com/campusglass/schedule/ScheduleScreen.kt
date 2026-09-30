@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -40,12 +42,14 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.campusglass.ui.theme.ThemePrefs
@@ -62,7 +66,7 @@ private val PALETTE = listOf(
 )
 
 /** 星期标签（1=周一 … 7=周日） */
-private fun dayLabel(wd: Int) = "周" + "一二三四五六日"[wd - 1]
+private fun dayLabel(wd: Int) = "周" + "一二三四五六日"[(wd - 1).coerceIn(0, 6)]
 
 /** 一周显示顺序：周日起始 */
 private val DAY_ORDER = listOf(7, 1, 2, 3, 4, 5, 6)
@@ -76,15 +80,34 @@ private data class Slot(val weekday: Int, val start: Int, val end: Int)
 /**
  * 课表 v2：
  * 周日起算 · 一节一行 · 跨节课程纵向占满多格 · 同时段冲突左右分栏 · 课程可编辑。
+ *
+ * v3.3 修复：
+ *  - 编辑课程时新增的时段不再被丢弃（旧版只保存第一个时段）；
+ *  - 周次解析为空时不再静默变成“全部 1-16 周”，改为提示用户修正（配合单/双周冲突提示）；
+ *  - 周次芯片范围跟随实际使用到的最大的周（旧版写死 1-20，21 周以后的课永远看不到）；
+ *  - 「每天上课节数」调小后越界课程会给出提示（旧版静默不画）；
+ *  - 「删除同名」加二次确认；周次展示压缩成区间；色块取模改为 floorMod（消除理论上的负索引崩溃）。
  */
 @Composable
 fun ScheduleScreen() {
     val context = LocalContext.current
     var courses by remember { mutableStateOf(ScheduleStore.loadCourses(context)) }
-    var week by remember { mutableIntStateOf(ScheduleStore.currentWeek(context)) }
+    var week by rememberSaveable { mutableStateOf(ScheduleStore.currentWeek(context)) }
     var showAdd by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<Course?>(null) }
     var editTarget by remember { mutableStateOf<Course?>(null) }
+    var confirmDeleteName by remember { mutableStateOf<String?>(null) }
+
+    val periods = PeriodTable.periodsPerDay(context)
+    val weekendOn = ThemePrefs.showWeekend.value
+    val shownDays = if (weekendOn) DAY_ORDER else listOf(1, 2, 3, 4, 5)
+    val maxWeek = remember(courses, week) {
+        val used = courses.flatMap { it.weeks }.maxOrNull() ?: 0
+        maxOf(20, week, used).coerceIn(1, 30)
+    }
+    val hiddenCount = remember(courses, week, periods, weekendOn) {
+        courses.count { it.weekday in shownDays && week in it.weeks && it.startPeriod > periods }
+    }
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -104,13 +127,24 @@ fun ScheduleScreen() {
 
             item {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items((1..20).toList()) { w ->
+                    items((1..maxWeek).toList()) { w ->
                         FilterChip(
                             selected = week == w,
                             onClick = { week = w },
                             label = { Text("第${w}周") },
                         )
                     }
+                }
+            }
+
+            if (hiddenCount > 0) {
+                item {
+                    Text(
+                        "⚠ 有 $hiddenCount 个课程时段超出「每天上课节数 = $periods」，未在表格中显示：" +
+                            "可在「设置 → 节次时间设置」里增大节数，或编辑这些课程。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             }
 
@@ -139,7 +173,7 @@ fun ScheduleScreen() {
                     Text("地点：${c.location.ifBlank { "—" }}", color = MaterialTheme.colorScheme.onSurface)
                     Text("时间：${dayLabel(c.weekday)} 第${c.startPeriod}-${c.endPeriod}节（占${c.endPeriod - c.startPeriod + 1}格）",
                         color = MaterialTheme.colorScheme.onSurface)
-                    Text("周次：" + c.weeks.sorted().joinToString(",") + " 周",
+                    Text("周次：" + (ScheduleStore.formatWeeks(c.weeks).ifBlank { "—" }) + " 周",
                         color = MaterialTheme.colorScheme.onSurface)
                 }
             },
@@ -155,8 +189,7 @@ fun ScheduleScreen() {
                         detail = null
                     }) { Text("删除该时段") }
                     TextButton(onClick = {
-                        courses = courses.filterNot { it.name == c.name }
-                        ScheduleStore.saveCourses(context, courses)
+                        confirmDeleteName = c.name
                         detail = null
                     }) { Text("删除同名") }
                 }
@@ -167,7 +200,28 @@ fun ScheduleScreen() {
         )
     }
 
-    // 新增 / 编辑
+    // 「删除同名」二次确认（旧版一键删掉所有同名课程，无法撤销）
+    confirmDeleteName?.let { name ->
+        val count = courses.count { it.name == name }
+        AlertDialog(
+            onDismissRequest = { confirmDeleteName = null },
+            title = { Text("删除同名课程") },
+            text = { Text("将删除全部名为「$name」的课程时段（共 $count 条），删除后不可恢复。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    courses = courses.filterNot { it.name == name }
+                    ScheduleStore.saveCourses(context, courses)
+                    confirmDeleteName = null
+                    Toast.makeText(context, "已删除：$name", Toast.LENGTH_SHORT).show()
+                }) { Text("确认删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeleteName = null }) { Text("取消") }
+            },
+        )
+    }
+
+    // 新增 / 编辑（编辑时保存全部时段，不再只保存第一个）
     if (showAdd || editTarget != null) {
         AddCourseDialog(
             initial = editTarget,
@@ -176,14 +230,16 @@ fun ScheduleScreen() {
                 editTarget = null
             },
             onSave = { newOnes ->
-                if (editTarget != null) {
-                    courses = courses - editTarget!! + newOnes.first()
-                    Toast.makeText(context, "已更新：${newOnes.first().name}", Toast.LENGTH_SHORT).show()
-                } else {
-                    courses = courses + newOnes
-                    Toast.makeText(context, "已添加：${newOnes.first().name}（${newOnes.size} 个时段）", Toast.LENGTH_SHORT).show()
-                }
+                val target = editTarget
+                courses = if (target != null) courses - target + newOnes else courses + newOnes
                 ScheduleStore.saveCourses(context, courses)
+                val n = newOnes.first().name
+                Toast.makeText(
+                    context,
+                    if (target != null) "已更新：$n（${newOnes.size} 个时段）"
+                    else "已添加：$n（${newOnes.size} 个时段）",
+                    Toast.LENGTH_SHORT,
+                ).show()
                 showAdd = false
                 editTarget = null
             },
@@ -204,7 +260,7 @@ private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Un
         Column(Modifier.padding(vertical = 6.dp, horizontal = 4.dp)) {
             // 表头
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.width(42.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.width(44.dp), contentAlignment = Alignment.Center) {
                     Text("节", style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurface)
                 }
@@ -232,7 +288,7 @@ private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Un
             // 表体：左侧节次 + 每天一列（格子背景层 + 课程层绝对定位跨行）
             Row {
                 // 节次标签列
-                Column(Modifier.width(42.dp)) {
+                Column(Modifier.width(44.dp)) {
                     (1..periods).forEach { p ->
                         Column(
                             Modifier.height(ROW_H.dp),
@@ -244,8 +300,10 @@ private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Un
                             Text(
                                 PeriodTable.startStr(context, p),
                                 style = MaterialTheme.typography.labelSmall,
-                                fontSize = 7.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                                fontSize = 9.sp,          // v3.3：7sp 太小，确实看不清
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                             )
                         }
                     }
@@ -315,8 +373,10 @@ private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Un
 
 @Composable
 private fun CourseBlock(c: Course, modifier: Modifier, onCourse: (Course) -> Unit) {
-    val color = PALETTE[(c.name.hashCode() * 31 + c.weekday * 7 + c.startPeriod).let { if (it < 0) -it else it } % PALETTE.size]
-    val scale = listOf(0.85f, 1f, 1.2f)[ThemePrefs.scheduleFontScale.value]
+    // floorMod：旧版 `hash * 31 + ...` 取绝对值对 Int.MIN_VALUE 无效，理论上会负索引崩溃
+    val seed = c.name.hashCode() * 31 + c.weekday * 7 + c.startPeriod
+    val color = PALETTE[Math.floorMod(seed, PALETTE.size)]
+    val scale = listOf(0.85f, 1f, 1.2f)[ThemePrefs.scheduleFontScale.value.coerceIn(0, 2)]
     val base = MaterialTheme.typography.labelSmall
     val style = base.copy(fontSize = base.fontSize * scale)
 
@@ -331,12 +391,14 @@ private fun CourseBlock(c: Course, modifier: Modifier, onCourse: (Course) -> Uni
             verticalArrangement = Arrangement.spacedBy(1.dp),
         ) {
             Text(c.name, style = style, fontWeight = FontWeight.Bold,
-                color = Color.Black, maxLines = 2)
+                color = Color.Black, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (c.location.isNotBlank()) {
-                Text(c.location, style = style, color = Color.Black.copy(alpha = 0.85f), maxLines = 1)
+                Text(c.location, style = style, color = Color.Black.copy(alpha = 0.85f),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (c.teacher.isNotBlank()) {
-                Text(c.teacher, style = style, color = Color.Black.copy(alpha = 0.7f), maxLines = 1)
+                Text(c.teacher, style = style, color = Color.Black.copy(alpha = 0.7f),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -398,7 +460,7 @@ private fun AddCourseDialog(
 ) {
     val editing = initial != null
     val context2 = LocalContext.current
-    val maxP = PeriodTable.periodsPerDay(context2).coerceIn(2, 24)   // 节次上限跟随自定义
+    val maxP = PeriodTable.periodsPerDay(context2).coerceIn(1, 24)   // 节次上限跟随自定义（1-24）
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var teacher by remember { mutableStateOf(initial?.teacher ?: "") }
     var location by remember { mutableStateOf(initial?.location ?: "") }
@@ -409,24 +471,13 @@ private fun AddCourseDialog(
         )
     }
     var weeksText by remember {
+        // 回填时把周次压缩成区间（如 1-16 / 2-5,7-8），避免出现超长逗号串
         mutableStateOf(
-            if (initial != null) {
-                // 压缩区间格式：如 1-16 / 2-5,7-8（避免 joinToString("-") 展开成长串）
-                val sorted = initial.weeks.sorted()
-                val sb = StringBuilder()
-                var i = 0
-                while (i < sorted.size) {
-                    var j = i
-                    while (j + 1 < sorted.size && sorted[j + 1] == sorted[j] + 1) j++
-                    if (sb.isNotEmpty()) sb.append(",")
-                    sb.append(if (i == j) "${sorted[i]}" else "${sorted[i]}-${sorted[j]}")
-                    i = j + 1
-                }
-                sb.toString().ifBlank { "1-16" }
-            } else "1-16"
+            if (initial != null) ScheduleStore.formatWeeks(initial.weeks).ifBlank { "1-16" } else "1-16"
         )
     }
     var parity by remember { mutableIntStateOf(0) }
+    var error by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -434,11 +485,16 @@ private fun AddCourseDialog(
         text = {
             Column(
                 Modifier
-                    .height(480.dp)
+                    .heightIn(max = 480.dp)          // 旧版写死 480dp：横屏/大字号下按钮会被顶出屏幕
+                    .imePadding()                    // 键盘不再遮挡底部输入框
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), singleLine = true,
+                OutlinedTextField(name, {
+                    name = it
+                    error = null
+                }, Modifier.fillMaxWidth(), singleLine = true,
+                    isError = error?.contains("课程名") == true,
                     label = { Text("课程名（必填）") })
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(teacher, { teacher = it }, Modifier.weight(1f), singleLine = true,
@@ -518,19 +574,40 @@ private fun AddCourseDialog(
 
                 Text("📅 周次（支持分段，如 2-5,7-8）", style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurface)
-                OutlinedTextField(weeksText, { weeksText = it }, Modifier.fillMaxWidth(), singleLine = true,
+                OutlinedTextField(weeksText, {
+                    weeksText = it
+                    error = null
+                }, Modifier.fillMaxWidth(), singleLine = true,
+                    isError = error?.contains("周次") == true,
                     label = { Text("周次范围") })
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("全部周", "单周", "双周").forEachIndexed { i, t ->
-                        FilterChip(selected = parity == i, onClick = { parity = i }, label = { Text(t) })
+                        FilterChip(selected = parity == i, onClick = { parity = i; error = null }, label = { Text(t) })
                     }
+                }
+                Text(
+                    if (editing) {
+                        "编辑时周次已按实际周次回填；「单周/双周」只是额外的过滤条件（可与周次范围冲突，冲突时会提示）。"
+                    } else {
+                        "例：1-16 表示每周都上；2-5,7-8 表示只在第 2-5 周和第 7-8 周上。"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+                error?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error)
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    if (name.isBlank()) return@Button
+                    if (name.isBlank()) {
+                        error = "请填写课程名"
+                        return@Button
+                    }
+                    // 修复：周次解析为空时不再静默兜底成 1-16 周（会把「双周」变成「全部周」）
                     val weeks = ScheduleStore.parseWeeks(weeksText)
                         .filter { w ->
                             when (parity) {
@@ -538,7 +615,12 @@ private fun AddCourseDialog(
                                 2 -> w % 2 == 0
                                 else -> true
                             }
-                        }.toSet().ifEmpty { (1..16).toSet() }
+                        }.toSet()
+                    if (weeks.isEmpty()) {
+                        error = "周次为空或与「单/双周」冲突，请修改周次（例如 1-16 或 2-5,7-8）"
+                        return@Button
+                    }
+                    error = null
                     onSave(
                         slots.map { s ->
                             Course(

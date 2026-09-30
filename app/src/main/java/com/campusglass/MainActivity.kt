@@ -1,13 +1,16 @@
 package com.campusglass
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalView
 import com.campusglass.ui.glass.hairlineBorder
 
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -51,8 +54,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -82,6 +87,8 @@ import com.campusglass.ui.home.HomeScreen
 import com.campusglass.ui.settings.SettingsScreen
 import com.campusglass.ui.theme.CampusGlassTheme
 import com.campusglass.ui.theme.ThemePrefs
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -116,6 +123,15 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 
 /**
  * 悬浮亚克力底栏（下拉滚动时自动隐藏）+ 全屏背景（异形屏铺满、按屏幕尺寸裁切）。
+ *
+ * v3.3 修复：
+ *  - 状态栏/导航栏图标深浅跟随 App 主题（旧版只在 onCreate 按系统深色设置决定，
+ *    App 内切「深色」而系统是浅色时，状态栏图标会看不见）；
+ *  - 底栏自动隐藏的阈值从 12px 提高到 80px 并加入累计位移，避免轻微滑动就把唯一的主导航藏起来；
+ *    切 Tab 时总是重新显示；
+ *  - 返回键：非首页先回首页，再按一次才退出；
+ *  - 自定义背景图改为后台线程 + 降采样解码，并处理照片 EXIF 方向（旧版主线程整图解码，
+ *    大图会卡顿/静默失败，竖拍照片可能横着显示）。
  */
 @Composable
 fun CampusGlassApp() {
@@ -128,17 +144,41 @@ fun CampusGlassApp() {
     }
     val acrylicOn = ThemePrefs.acrylicEnabled.value
 
-    // 底栏自动隐藏：内容下滑隐藏，上滑出现
+    // 系统栏图标随 App 主题切换（enableEdgeToEdge 只在启动时按系统深色设置决定一次）
+    val view = LocalView.current
+    LaunchedEffect(dark) {
+        val window = (view.context as? android.app.Activity)?.window ?: return@LaunchedEffect
+        runCatching {
+            androidx.core.view.WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = !dark
+                isAppearanceLightNavigationBars = !dark
+            }
+        }
+    }
+
+    // 底栏自动隐藏：内容下滑隐藏，上滑出现（累计位移 + 阈值，避免误隐藏）
     var barVisible by remember { mutableStateOf(true) }
     val scrollConn = remember {
         object : NestedScrollConnection {
+            private var accumulated = 0f
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (available.y < -12f) barVisible = false
-                else if (available.y > 12f) barVisible = true
+                accumulated += available.y
+                if (accumulated < -80f) {
+                    barVisible = false
+                    accumulated = 0f
+                } else if (accumulated > 40f) {
+                    barVisible = true
+                    accumulated = 0f
+                }
                 return Offset.Zero
             }
         }
     }
+    // 切 Tab / 回到前台时确保底栏可见
+    LaunchedEffect(tab) { barVisible = true }
+
+    // 返回键：非首页先回首页（旧版任意 Tab 直接退出应用）
+    BackHandler(enabled = tab != Tab.HOME) { tab = Tab.HOME }
 
     Box(Modifier.fillMaxSize()) {
         AppBackground(glass)
@@ -259,18 +299,17 @@ private fun AppBackground(glass: dev.chrisbanes.haze.HazeState) {
     val crop = ThemePrefs.bgCropMode.value
     val screen = remember { screenSizePx(context) }
 
-    val bitmap = remember(path, nonce, crop, screen) {
-        if (path.isNotBlank() && File(path).exists()) {
-            runCatching {
-                val src = BitmapFactory.decodeFile(path) ?: return@runCatching null
-                cropToScreen(src, screen.first, screen.second, crop)
-            }.getOrNull()
-        } else null
+    // v3.3：解码 + 裁切放到 IO 线程并降采样（旧版在组合期主线程 decodeFile 整图 + 二次分配）
+    val bitmap by produceState<Bitmap?>(null, path, nonce, crop, screen) {
+        value = withContext(Dispatchers.IO) {
+            loadWallpaper(path, screen.first, screen.second, crop)
+        }
     }
 
-    if (bitmap != null) {
+    val current = bitmap
+    if (current != null) {
         Image(
-            bitmap = bitmap.asImageBitmap(),
+            bitmap = current.asImageBitmap(),
             contentDescription = null,
             modifier = Modifier
                 .fillMaxSize()
@@ -293,6 +332,52 @@ private fun screenSizePx(context: Context): Pair<Int, Int> {
     val b = wm.currentWindowMetrics.bounds
     return b.width() to b.height()
 }
+
+/**
+ * 后台线程解码壁纸：先读尺寸算 inSampleSize（最长边不超过屏幕的 2 倍），
+ * 再按 EXIF 方向旋转，最后按屏幕比例裁切。失败返回 null（显示默认背景）。
+ */
+private fun loadWallpaper(path: String, sw: Int, sh: Int, mode: ThemePrefs.BgCrop): Bitmap? {
+    if (path.isBlank()) return null
+    if (!File(path).exists()) return null
+    return runCatching {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
+
+        val maxSide = (maxOf(sw, sh).coerceAtLeast(1)) * 2
+        var sample = 1
+        while (bounds.outWidth / sample > maxSide || bounds.outHeight / sample > maxSide) {
+            sample *= 2
+        }
+
+        val decoded = BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: return@runCatching null
+        val rotated = applyExifRotation(path, decoded)
+        if (rotated !== decoded && !decoded.isRecycled) decoded.recycle()
+        cropToScreen(rotated, sw, sh, mode)
+    }.getOrNull()
+}
+
+/** 按 EXIF 方向纠正（竖拍照片不处理会横着显示） */
+private fun applyExifRotation(path: String, src: Bitmap): Bitmap = runCatching {
+    @Suppress("DEPRECATION")
+    val exif = android.media.ExifInterface(path)
+    val orientation = exif.getAttributeInt(
+        android.media.ExifInterface.TAG_ORIENTATION,
+        android.media.ExifInterface.ORIENTATION_NORMAL,
+    )
+    val matrix = Matrix()
+    when (orientation) {
+        android.media.ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+        android.media.ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+        android.media.ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+        android.media.ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+        android.media.ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+        else -> return@runCatching src
+    }
+    Bitmap.createBitmap(src, 0, 0, src.width, src.height, matrix, true)
+}.getOrDefault(src)
 
 /** 按屏幕比例裁切（居中/顶部/底部/适应宽度） */
 private fun cropToScreen(src: Bitmap, sw: Int, sh: Int, mode: ThemePrefs.BgCrop): Bitmap {
