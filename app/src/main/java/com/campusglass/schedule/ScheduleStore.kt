@@ -33,30 +33,35 @@ object PeriodTable {
         "19:00-19:45", "19:55-20:40", "20:50-21:35",
     )
 
+    /** 每天最多节数（用户可自定义 1-24） */
+    const val MAX_PERIODS = 24
+
     private fun prefs(c: Context) = c.getSharedPreferences("schedule", Context.MODE_PRIVATE)
 
-    /** 返回每节 "HH:mm-HH:mm"（用户可改） */
+    /** 返回每节 "HH:mm-HH:mm"（用户可改），最多 24 节 */
     fun all(c: Context): List<String> {
         val saved = prefs(c).getString("periodTimes", null)
         val list = saved?.split(",")?.filter { it.contains("-") } ?: emptyList()
-        return (list + DEFAULT_TIMES).take(DEFAULT_TIMES.size)
+        val base = list + DEFAULT_TIMES.drop(list.size) + List(MAX_PERIODS) { "未设置-未设置" }
+        return base.take(MAX_PERIODS)
     }
 
     fun save(c: Context, times: List<String>) {
-        prefs(c).edit().putString("periodTimes", times.take(DEFAULT_TIMES.size).joinToString(",")).apply()
+        prefs(c).edit().putString("periodTimes", times.take(MAX_PERIODS).joinToString(",")).apply()
     }
 
     fun startStr(c: Context, p: Int): String =
-        all(c)[(p - 1).coerceIn(0, DEFAULT_TIMES.size - 1)].substringBefore("-")
+        all(c)[(p - 1).coerceIn(0, MAX_PERIODS - 1)].substringBefore("-")
 
     fun endStr(c: Context, p: Int): String =
-        all(c)[(p - 1).coerceIn(0, DEFAULT_TIMES.size - 1)].substringAfter("-")
+        all(c)[(p - 1).coerceIn(0, MAX_PERIODS - 1)].substringAfter("-")
 
-    /** 每天节数（自定义一天上几节课） */
-    fun periodsPerDay(c: Context): Int = prefs(c).getInt("periodsPerDay", 11).coerceIn(4, DEFAULT_TIMES.size)
+    /** 每天节数（自定义 1-24，不再被默认课表长度卡死） */
+    fun periodsPerDay(c: Context): Int =
+        prefs(c).getInt("periodsPerDay", DEFAULT_TIMES.size).coerceIn(1, MAX_PERIODS)
 
     fun setPeriodsPerDay(c: Context, n: Int) {
-        prefs(c).edit().putInt("periodsPerDay", n.coerceIn(4, DEFAULT_TIMES.size)).apply()
+        prefs(c).edit().putInt("periodsPerDay", n.coerceIn(1, MAX_PERIODS)).apply()
     }
 
     /** 由开始时间反查最接近的节次（ICS 备用） */

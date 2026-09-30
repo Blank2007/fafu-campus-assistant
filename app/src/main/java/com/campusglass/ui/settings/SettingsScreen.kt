@@ -85,6 +85,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
+    "v2.23 · 2026-09-30 23:55" to "亚克力背板圆角修复（模糊层纳入圆角裁切）；每天上课节数真自定义 1-24（根治超 12/11 被自动截断、设置无效的上限 bug）；作息行数跟随节数",
     "v2.22 · 2026-09-30 00:55" to "底栏整体重建（自定义胶囊模型，描边内嵌绘制不断边）；底部黑块根治（系统导航栏对比度遮罩）；每天节数可自定义到 24；七彩推荐色修偏色（标准零漂移）+ 改滑动不截断",
     "v2.21 · 2026-09-30 00:35" to "课程可编辑；连上多节跨行占满多格（冲突左右分栏）；每天上课节数可自定义（选项改为滑动不受截断）；主题色新增小米「色彩风格」（标准/鲜艳/柔和）+ 色温；底栏边框重构（消除模糊毛边+发丝描边）",
     "v2.20 · 2026-09-29 23:55" to "修复添加课程里周几/节次无法选择的 bug（状态不刷新 + 芯片溢出）：改为可观察状态 + 横向滑动选择",
@@ -562,7 +563,7 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
                     label = { Text("学期起始日（第一周的周日，如 2026-08-30）") },
                 )
                 HorizontalDivider()
-                times.value.forEachIndexed { i, t ->
+                times.value.take(perDayState).forEachIndexed { i, t ->
                     val start = remember(t) { mutableStateOf(t.substringBefore("-")) }
                     val end = remember(t) { mutableStateOf(t.substringAfter("-")) }
                     Text("第${i + 1}节", style = MaterialTheme.typography.labelLarge)

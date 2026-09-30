@@ -10,6 +10,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -57,8 +58,9 @@ fun Modifier.acrylic(
         colorEffects(listOf(HazeColorEffect.tint(tint)))
     }
     return this
-        .hazeBlur(HazeInput.Backdrop(state), style)   // 先模糊
-        .clip(shape)                                   // 后裁切：模糊不溢出圆角，消除毛边框
+        .graphicsLayer(shape = shape, clip = true)   // 圆角裁切层包住模糊（背板四角必定圆滑）
+        .hazeBlur(HazeInput.Backdrop(state), style)
+        .clip(shape)                                   // 内容也裁圆角
 }
 
 /** 发丝描边：向内嵌半宽绘制，四角连续不断边（修复边框断开/缺失） */
