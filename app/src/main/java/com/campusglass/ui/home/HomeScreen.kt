@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.campusglass.ui.glass.AcrylicCard
+import com.campusglass.ui.widgets.ScreenHeader
 
 /** 农大常用网站（已核实可访问） */
 private val schoolSites = listOf(
@@ -34,38 +35,54 @@ private val schoolSites = listOf(
 fun HomeScreen(onGoto: (String) -> Unit) {
     val context = LocalContext.current
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 24.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        AcrylicCard(
+    Column(Modifier.fillMaxSize()) {
+        // 标题保留
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp)) {
+            ScreenHeader("首页")
+        }
+        // 官网区域整体居中（占据剩余空间）
+        Box(
             Modifier
-                .fillMaxWidth()
-                .widthIn(max = 380.dp)
+                .fillMaxSize()
+                .padding(horizontal = 24.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Column(
-                Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+            AcrylicCard(
+                Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 380.dp)
             ) {
-                Text("🏫 常用官网", style = MaterialTheme.typography.titleMedium)
-                schoolSites.forEach { (name, url) ->
-                    OutlinedButton(
-                        onClick = {
-                            runCatching {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                Column(
+                    Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text("🏫 常用官网", style = MaterialTheme.typography.titleMedium)
+                    schoolSites.forEach { (name, url) ->
+                        OutlinedButton(
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(name)
+                                Text(
+                                    url,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                )
                             }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text(name) }
+                        }
+                    }
+                    Text(
+                        "点击在浏览器打开（已核实可访问）",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                    )
                 }
-                Text(
-                    "点击在浏览器打开（已核实可访问）",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                )
             }
         }
     }
