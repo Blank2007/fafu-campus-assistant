@@ -85,6 +85,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
+    "v2.24 · 2026-10-01 00:15" to "节数输入框修复（文本与状态分离）：可删空重输、即时刷新，节数 24 可随意调回；点芯片同步文本框",
     "v2.23 · 2026-09-30 23:55" to "亚克力背板圆角修复（模糊层纳入圆角裁切）；每天上课节数真自定义 1-24（根治超 12/11 被自动截断、设置无效的上限 bug）；作息行数跟随节数",
     "v2.22 · 2026-09-30 00:55" to "底栏整体重建（自定义胶囊模型，描边内嵌绘制不断边）；底部黑块根治（系统导航栏对比度遮罩）；每天节数可自定义到 24；七彩推荐色修偏色（标准零漂移）+ 改滑动不截断",
     "v2.21 · 2026-09-30 00:35" to "课程可编辑；连上多节跨行占满多格（冲突左右分栏）；每天上课节数可自定义（选项改为滑动不受截断）；主题色新增小米「色彩风格」（标准/鲜艳/柔和）+ 色温；底栏边框重构（消除模糊毛边+发丝描边）",
@@ -526,6 +527,7 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val times = remember { mutableStateOf(PeriodTable.all(context)) }
     var perDayState by remember { mutableIntStateOf(PeriodTable.periodsPerDay(context)) }
+    var perDayText by remember { mutableStateOf(PeriodTable.periodsPerDay(context).toString()) }   // 文本与状态分离，支持清空重输
     var termStartText by remember { mutableStateOf(ScheduleStore.termStart(context).toString()) }
 
     AlertDialog(
@@ -543,19 +545,23 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
                     items((4..12).toList()) { n ->
                         FilterChip(
                             selected = perDayState == n,
-                            onClick = { perDayState = n },
+                            onClick = {
+                                perDayState = n
+                                perDayText = n.toString()
+                            },
                             label = { Text("$n") },
                         )
                     }
                 }
                 OutlinedTextField(
-                    value = perDayState.toString(),
+                    value = perDayText,
                     onValueChange = { v ->
-                        perDayState = v.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 24) ?: perDayState
+                        perDayText = v.filter { it.isDigit() }.take(3)   // 可删空、可重输，即时刷新
+                        perDayText.toIntOrNull()?.let { perDayState = it.coerceIn(1, 24) }
                     },
                     Modifier.fillMaxWidth(),
                     singleLine = true,
-                    label = { Text("自定义每天节数（1-24，可输入 13、15 等大数字）") },
+                    label = { Text("自定义每天节数（1-24，可清空后输 13、15 等）") },
                 )
                 OutlinedTextField(
                     termStartText, { termStartText = it },
@@ -583,7 +589,10 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
         confirmButton = {
             Button(onClick = {
                 PeriodTable.save(context, times.value)
-                PeriodTable.setPeriodsPerDay(context, perDayState)
+                PeriodTable.setPeriodsPerDay(
+                    context,
+                    perDayText.toIntOrNull()?.coerceIn(1, 24) ?: perDayState,
+                )
                 runCatching { ScheduleStore.setTermStart(context, LocalDate.parse(termStartText)) }
                 onDismiss()
             }) { Text("保存") }
