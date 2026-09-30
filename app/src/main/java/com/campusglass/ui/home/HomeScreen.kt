@@ -22,10 +22,10 @@ import com.campusglass.ui.widgets.ScreenHeader
 
 /** 农大常用网站（已核实可访问） */
 private val schoolSites = listOf(
-    "金山学院官网" to "http://jsxy.fafu.edu.cn/",
-    "金山学院教务系统（正方）" to "http://jsxyjwgl.fafu.edu.cn/",
-    "福建农林大学官网" to "https://www.fafu.edu.cn/",
-    "福农大教务管理系统" to "http://jwgl.fafu.edu.cn/",
+    "🏫 金山学院官网" to "http://jsxy.fafu.edu.cn/",
+    "📝 金山学院教务系统（正方）" to "http://jsxyjwgl.fafu.edu.cn/",
+    "🎓 福建农林大学官网" to "https://www.fafu.edu.cn/",
+    "📚 福农大教务管理系统" to "http://jwgl.fafu.edu.cn/",
 )
 
 /**

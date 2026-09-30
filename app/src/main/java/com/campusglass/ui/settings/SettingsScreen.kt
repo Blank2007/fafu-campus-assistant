@@ -1,4 +1,9 @@
 package com.campusglass.ui.settings
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 
@@ -85,6 +90,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
+    "v3.2.zilyf · 2026-10-01 01:15" to "APP 图标重新设计（渐变+学士帽自适应图标）；官网加小图标；关于页 GitHub 头像（点击可访问）；全量盘查：周次编辑格式修复、越界课程保护、安全性检查",
     "v3.1.zilyf · 2026-10-01 00:35" to "首页保留「首页」标题；官网卡片整体居中；版本号 v3.1.zilyf",
     "v3.0.zhy · 2026-10-01 00:25" to "【稳定版】首页精简：仅保留常用官网并整体居中",
     "v2.24 · 2026-10-01 00:15" to "节数输入框修复（文本与状态分离）：可删空重输、即时刷新，节数 24 可随意调回；点芯片同步文本框",
@@ -301,10 +307,37 @@ fun SettingsScreen() {
         item {
             AcrylicCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        "校园助手-FAFUer专用 v${BuildConfig.VERSION_NAME}",
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Image(
+                            painter = painterResource(com.campusglass.R.drawable.github_avatar),
+                            contentDescription = "GitHub 头像",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .clickable {
+                                    runCatching {
+                                        context.startActivity(
+                                            Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Blank2007"))
+                                        )
+                                    }
+                                },
+                        )
+                        Column {
+                            Text(
+                                "校园助手-FAFUer专用 v${BuildConfig.VERSION_NAME}",
+                                style = MaterialTheme.typography.titleLarge,
+                            )
+                            Text(
+                                "GitHub · Void_Blank（点击头像可访问）",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
                     Text(
                         "取件码快捷跳转（支付宝·菜鸟 / 拼多多）· 快递单号查询 · 手动课表 · 南平校区公交",
                         style = MaterialTheme.typography.bodyMedium,

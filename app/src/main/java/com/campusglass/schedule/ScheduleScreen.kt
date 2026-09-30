@@ -288,16 +288,20 @@ private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Un
                             lanes.forEach { lane ->
                                 Box(Modifier.weight(1f).fillMaxHeight()) {
                                     lane.forEach { c ->
-                                        val span = (c.endPeriod - c.startPeriod + 1).coerceIn(1, periods)
-                                        CourseBlock(
-                                            c,
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 2.dp)
-                                                .absoluteOffset(y = ((c.startPeriod - 1) * ROW_H + 2).dp)
-                                                .height((span * ROW_H - 4).dp),
-                                            onCourse,
-                                        )
+                                        // 越界保护：起始节超过每日节数的课不画；跨行不超出表格
+                                        if (c.startPeriod in 1..periods) {
+                                            val span = (c.endPeriod.coerceAtMost(periods) - c.startPeriod + 1)
+                                                .coerceIn(1, periods)
+                                            CourseBlock(
+                                                c,
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 2.dp)
+                                                    .absoluteOffset(y = ((c.startPeriod - 1) * ROW_H + 2).dp)
+                                                    .height((span * ROW_H - 4).dp),
+                                                onCourse,
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -406,7 +410,20 @@ private fun AddCourseDialog(
     }
     var weeksText by remember {
         mutableStateOf(
-            if (initial != null) initial.weeks.sorted().joinToString("-") else "1-16"
+            if (initial != null) {
+                // 压缩区间格式：如 1-16 / 2-5,7-8（避免 joinToString("-") 展开成长串）
+                val sorted = initial.weeks.sorted()
+                val sb = StringBuilder()
+                var i = 0
+                while (i < sorted.size) {
+                    var j = i
+                    while (j + 1 < sorted.size && sorted[j + 1] == sorted[j] + 1) j++
+                    if (sb.isNotEmpty()) sb.append(",")
+                    sb.append(if (i == j) "${sorted[i]}" else "${sorted[i]}-${sorted[j]}")
+                    i = j + 1
+                }
+                sb.toString().ifBlank { "1-16" }
+            } else "1-16"
         )
     }
     var parity by remember { mutableIntStateOf(0) }
