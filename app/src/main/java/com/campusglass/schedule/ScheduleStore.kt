@@ -64,7 +64,81 @@ object PeriodTable {
         prefs(c).edit().putInt("periodsPerDay", n.coerceIn(1, MAX_PERIODS)).apply()
     }
 
-    /** 由开始时间反查最接近的节次（SC-7：未设置节次安全跳过，不再崩溃） */
+    /**
+ * 课表分享码：FAFUSCH1: + Base64(JSON)，同软件内一键导入。
+ */
+object ScheduleShare {
+    private const val PREFIX = "FAFUSCH1:"
+
+    /** 周次集合 → 压缩区间（1-16 / 2-5,7-8） */
+    private fun compactWeeks(weeks: Set<Int>): String {
+        val sorted = weeks.sorted()
+        val sb = StringBuilder()
+        var i = 0
+        while (i < sorted.size) {
+            var j = i
+            while (j + 1 < sorted.size && sorted[j + 1] == sorted[j] + 1) j++
+            if (sb.isNotEmpty()) sb.append(",")
+            sb.append(if (i == j) "${sorted[i]}" else "${sorted[i]}-${sorted[j]}")
+            i = j + 1
+        }
+        return sb.toString()
+    }
+
+    fun encode(courses: List<Course>, termStart: String): String {
+        val arr = JSONArray()
+        courses.forEach { c ->
+            arr.put(JSONObject().apply {
+                put("name", c.name)
+                put("teacher", c.teacher)
+                put("location", c.location)
+                put("weekday", c.weekday)
+                put("start", c.startPeriod)
+                put("end", c.endPeriod)
+                put("weeks", compactWeeks(c.weeks))
+            })
+        }
+        val json = JSONObject().apply {
+            put("v", 1)
+            put("termStart", termStart)
+            put("courses", arr)
+        }.toString()
+        return PREFIX + android.util.Base64.encodeToString(
+            json.toByteArray(Charsets.UTF_8),
+            android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP,
+        )
+    }
+
+    /** 从任意文本中识别分享码 → (学期起始日, 课程列表)；识别不到返回 null */
+    fun decode(text: String): Pair<String, List<Course>>? {
+        val idx = text.indexOf(PREFIX)
+        if (idx < 0) return null
+        val code = text.substring(idx + PREFIX.length).trim().split(Regex("\\s")).firstOrNull().orEmpty()
+        if (code.isBlank()) return null
+        val json = runCatching {
+            String(android.util.Base64.decode(code, android.util.Base64.URL_SAFE), Charsets.UTF_8)
+        }.getOrNull() ?: return null
+        return runCatching {
+            val o = JSONObject(json)
+            val arr = o.optJSONArray("courses") ?: JSONArray()
+            val list = (0 until arr.length()).mapNotNull { i ->
+                runCatching {
+                    val c = arr.getJSONObject(i)
+                    Course(
+                        name = c.getString("name"),
+                        teacher = c.optString("teacher"),
+                        location = c.optString("location"),
+                        weekday = c.getInt("weekday"),
+                        startPeriod = c.getInt("start"),
+                        endPeriod = c.getInt("end"),
+                        weeks = ScheduleStore.parseWeeks(c.optString("weeks")),
+                    )
+                }.getOrNull()
+            }
+            if (list.isEmpty()) null else o.optString("termStart", "") to list
+        }.getOrNull()
+    }
+}
     fun periodOfTime(c: Context, t: LocalTime): Int {
         val times = all(c).mapNotNull {
             runCatching {
@@ -113,6 +187,8 @@ object ScheduleStore {
             )
         }
         prefs(c).edit().putString("courses", arr.toString()).apply()
+        // 课表变化后即时刷新桌面小部件
+        runCatching { com.campusglass.widget.TodayWidgetProvider.pushUpdate(c) }
     }
 
     /** 学期第一周的【周日】；9/28（周一）= 第五周 ⇒ 第一周周日 = 2026-08-30 */
@@ -161,3 +237,6 @@ object ScheduleStore {
         }.toSet()
     }
 }
+
+/** 顶层别名：课表分享码（实际定义在 PeriodTable 内） */
+typealias ScheduleShare = PeriodTable.ScheduleShare

@@ -87,6 +87,7 @@ fun ScheduleScreen() {
     var detail by remember { mutableStateOf<Course?>(null) }
     var editTarget by remember { mutableStateOf<Course?>(null) }
     var pendingDeleteAll by remember { mutableStateOf<Course?>(null) }   // SC-6
+    var importCandidate by remember { mutableStateOf<Pair<String, List<Course>>?>(null) }   // 分享导入
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -95,6 +96,53 @@ fun ScheduleScreen() {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item { ScreenHeader("课表") }
+
+            // 分享 / 导入（同软件一键导入）
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            val code = ScheduleShare.encode(
+                                courses, ScheduleStore.termStart(context).toString()
+                            )
+                            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                as android.content.ClipboardManager
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("课表分享码", code))
+                            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(
+                                    android.content.Intent.EXTRA_TEXT,
+                                    "我的课表分享码（校园助手 App 课表页点「导入课表」）：\n$code",
+                                )
+                            }
+                            runCatching {
+                                context.startActivity(android.content.Intent.createChooser(send, "分享课表"))
+                            }
+                            Toast.makeText(context, "分享码已生成并复制，发给同学即可一键导入", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("📤 分享课表") }
+                    OutlinedButton(
+                        onClick = {
+                            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                as android.content.ClipboardManager
+                            val text = cm.primaryClip?.getItemAt(0)
+                                ?.coerceToText(context)?.toString().orEmpty()
+                            val parsed = ScheduleShare.decode(text)
+                            if (parsed == null) {
+                                Toast.makeText(
+                                    context,
+                                    "剪贴板里没找到课表分享码（FAFUSCH1: 开头），请先复制同学发的分享码",
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                            } else {
+                                importCandidate = parsed
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("📥 导入课表") }
+                }
+            }
 
             item {
                 Text(
@@ -190,6 +238,68 @@ fun ScheduleScreen() {
             },
             dismissButton = {
                 TextButton(onClick = { pendingDeleteAll = null }) { Text("取消") }
+            },
+        )
+    }
+
+    // 导入确认（合并 / 替换）
+    importCandidate?.let { (termStart, imported) ->
+        AlertDialog(
+            onDismissRequest = { importCandidate = null },
+            title = { Text("📥 导入课表") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "识别到 ${imported.size} 个时段（共 ${imported.map { it.name }.distinct().size} 门课）",
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    if (termStart.isNotBlank()) {
+                        Text(
+                            "分享者的学期起始日：$termStart",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        )
+                    }
+                    Text("合并＝加到现有课表后（重复时段自动去重）；替换＝清空现有后导入。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = {
+                        val dedup = imported.filterNot { imp ->
+                            courses.any {
+                                it.name == imp.name && it.weekday == imp.weekday &&
+                                    it.startPeriod == imp.startPeriod
+                            }
+                        }
+                        courses = courses + dedup
+                        ScheduleStore.saveCourses(context, courses)
+                        if (termStart.isNotBlank()) {
+                            runCatching {
+                                ScheduleStore.setTermStart(context, java.time.LocalDate.parse(termStart))
+                            }
+                        }
+                        importCandidate = null
+                        Toast.makeText(context, "已合并导入 ${dedup.size} 个时段", Toast.LENGTH_SHORT).show()
+                    }) { Text("合并导入") }
+                    TextButton(onClick = {
+                        courses = imported
+                        ScheduleStore.saveCourses(context, courses)
+                        if (termStart.isNotBlank()) {
+                            runCatching {
+                                ScheduleStore.setTermStart(context, java.time.LocalDate.parse(termStart))
+                            }
+                        }
+                        importCandidate = null
+                        Toast.makeText(context, "已替换为分享的课表", Toast.LENGTH_SHORT).show()
+                    }) { Text("替换导入") }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { importCandidate = null }) { Text("取消") }
             },
         )
     }
