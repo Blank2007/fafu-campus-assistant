@@ -61,16 +61,20 @@ fun CampusGlassTheme(
     MaterialTheme(colorScheme = colorScheme, content = content)
 }
 
-/** 色彩风格（标准/鲜艳/柔和）+ 色温（冷	o 暖）→ 小米「色彩风格」式调整 */
-fun adjustColorStyle(c: Color): Color {
-    if (ThemePrefs.colorStyle.value == 0 && ThemePrefs.colorTemp.value == 0f) return c  // 标准+中性：零漂移，防偏色
+/** 色彩风格（标准/鲜艳/柔和）+ 色温（冷	o 暖）；style/temp 可临时传入用于预览（SET-1） */
+fun adjustColorStyle(
+    c: Color,
+    style: Int = ThemePrefs.colorStyle.value,
+    temp: Float = ThemePrefs.colorTemp.value,
+): Color {
+    if (style == 0 && temp == 0f) return c  // 标准+中性：零漂移，防偏色
     val hs = FloatArray(3)
     android.graphics.Color.colorToHSV(c.toArgb(), hs)
-    hs[1] = (hs[1] * when (ThemePrefs.colorStyle.value) {
+    hs[1] = (hs[1] * when (style) {
         1 -> 1.35f   // 鲜艳
         2 -> 0.55f   // 柔和
         else -> 1f   // 标准
     }).coerceIn(0f, 1f)
-    hs[0] = (hs[0] + ThemePrefs.colorTemp.value * 1.2f + 360f) % 360f
+    hs[0] = (hs[0] + temp * 1.2f + 360f) % 360f
     return Color(android.graphics.Color.HSVToColor(hs))
 }

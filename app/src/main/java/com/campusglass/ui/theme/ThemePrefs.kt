@@ -1,5 +1,6 @@
 package com.campusglass.ui.theme
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.graphics.toArgb
 
 import android.content.Context
 import androidx.compose.runtime.mutableIntStateOf
@@ -51,7 +52,7 @@ object ThemePrefs {
         }.getOrDefault(ThemeMode.SYSTEM)
         acrylicEnabled.value = p.getBoolean("acrylic", true)
         themeColorIndex.value = p.getInt("colorIdx", 0).coerceIn(0, 8)
-        customColor.value = Color(p.getLong("customColor", 0xFF3B5BFF))
+        customColor.value = Color(p.getLong("customColor", 0xFF3B5BFFL).toInt())   // ARGB Int 约定（P0-3）
         colorStyle.value = p.getInt("colorStyle", 0).coerceIn(0, 2)
         colorTemp.value = p.getFloat("colorTemp", 0f).coerceIn(-20f, 20f)
         bgImagePath.value = p.getString("bgImage", "") ?: ""
@@ -81,7 +82,7 @@ object ThemePrefs {
         customColor.value = color
         themeColorIndex.value = 8
         prefs(c).edit()
-            .putLong("customColor", color.value.toLong())
+            .putLong("customColor", color.toArgb().toLong())   // 存 ARGB Int（P0-3）
             .putInt("colorIdx", 8)
             .apply()
     }

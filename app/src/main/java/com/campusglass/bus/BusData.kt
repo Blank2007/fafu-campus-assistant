@@ -44,7 +44,7 @@ object BusData {
             firstDeparture = "7:45",
             lastDeparture = "21:00",
             fare = "全程一票制 1 元",
-            intervalNote = "早高峰 7:30-8:00 每 10 分钟一班（官方）；平峰约 15 分钟、晚间约 20 分钟（推算）",
+            intervalNote = "早高峰 7:45-8:00 每 10 分钟一班（官方）；其余约 15 分钟（推算）",
             timeOfficial = true,
             destTags = listOf("万达广场"),
             mapKeyword = "建阳103路公交",
@@ -177,9 +177,13 @@ object BusData {
         val out = mutableListOf<String>()
         var t = first
         while (t <= last) {
-            out += String.format("%02d:%02d", t / 60, t % 60)
+            out += String.format(java.util.Locale.US, "%02d:%02d", t / 60, t % 60)   // BUS-8：Locale 固定
             val inPeak = peakStep != null && peakStart != null && peakEnd != null && t >= peakStart && t < peakEnd
             t += if (inPeak) peakStep!! else step
+        }
+        // BUS-1：末班车必进时刻表（间隔推算可能永远落不到末班点）
+        if (out.isEmpty() || toMin(out.last()) < last) {
+            out += String.format(java.util.Locale.US, "%02d:%02d", last / 60, last % 60)
         }
         return out
     }

@@ -147,6 +147,14 @@ fun CampusGlassApp() {
             LocalGlass provides glass,
             LocalContentColor provides MaterialTheme.colorScheme.onSurface,
         ) {
+            // UI-1：系统栏图标深浅跟随 App 主题（而非系统设置）
+            val winCtx = androidx.compose.ui.platform.LocalContext.current
+            androidx.compose.runtime.SideEffect {
+                val act = winCtx as? android.app.Activity ?: return@SideEffect
+                val controller = androidx.core.view.WindowInsetsControllerCompat(act.window, act.window.decorView)
+                controller.isAppearanceLightStatusBars = !dark
+                controller.isAppearanceLightNavigationBars = !dark
+            }
             Scaffold(
                 containerColor = Color.Transparent,
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),

@@ -55,7 +55,7 @@ fun BusScreen() {
     Column(Modifier.fillMaxSize()) {
         ScreenHeader("附近公交 · 南平校区")
 
-        Row(
+        FlowRow(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp),
@@ -85,7 +85,9 @@ fun BusScreen() {
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Text(
-                            route.intervalNote + if (route.timeOfficial) "" else "（推算）",
+                            // BUS-3：避免重复追加「（推算）」
+                            route.intervalNote +
+                                if (route.timeOfficial || route.intervalNote.contains("推算")) "" else "（推算）",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                         )
@@ -131,12 +133,17 @@ fun BusScreen() {
                     Text("发车时刻", style = MaterialTheme.typography.titleSmall)
                     if (times.isEmpty()) {
                         Text(
-                            "该线路发车间隔波动较大（${route.intervalNote}），建议用「掌上公交」APP 看实时到站。",
+                            "该线路按官方时刻发车（${route.intervalNote}），建议用「掌上公交」APP 看实时到站。",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     } else {
                         Text(
-                            if (route.timeOfficial) "早高峰为官方时刻，其余按间隔推算：" else "按发车间隔推算（以站牌为准）：",
+                            // BUS-6：标题按线路实际数据类型走
+                            when {
+                                route.fixedTimes != null -> "官方固定班次："
+                                route.timeOfficial && route.peakIntervalMin != null -> "早高峰为官方时刻，其余按间隔推算："
+                                else -> "按发车间隔推算（以站牌为准）："
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                         )

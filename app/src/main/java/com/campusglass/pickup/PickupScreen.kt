@@ -1,4 +1,5 @@
 package com.campusglass.pickup
+import androidx.compose.foundation.layout.imePadding
 
 import android.content.ClipboardManager
 import android.content.Context
@@ -50,29 +51,39 @@ fun PickupScreen() {
     var trackingNo by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<ExpressApi.Result?>(null) }
+    var resultNo by remember { mutableStateOf("") }   // PK-2：结果绑定单号，防串号
     var history by remember {
-        mutableStateOf(prefs.getStringSet("history", emptySet())?.toList().orEmpty())
+        // PK-6：有序存储（旧 Set 顺序随机）+ 不区分大小写去重
+        mutableStateOf(
+            prefs.getString("history2", "")?.split("\n")?.filter { it.isNotBlank() }
+                ?: prefs.getStringSet("history", emptySet())?.toList().orEmpty()
+        )
     }
 
-    fun doQuery(nu: String) {
+    fun doQuery(nuRaw: String) {
+        if (loading) return                      // PK-2：查询中禁止重入
+        val nu = ExpressApi.normalize(nuRaw)
         if (nu.isBlank()) {
             Toast.makeText(context, "先输入快递单号", Toast.LENGTH_SHORT).show()
             return
         }
-        val h = (listOf(nu) + history.filter { it != nu }).take(10)
+        val h = (listOf(nu) + history.filter { !it.equals(nu, true) }).take(10)
         history = h
-        prefs.edit().putStringSet("history", h.toSet()).apply()
+        prefs.edit().putString("history2", h.joinToString("\n")).apply()
         loading = true
         result = null
+        resultNo = nu
         scope.launch {
             val r = withContext(Dispatchers.IO) { ExpressApi.query(nu) }
-            result = r
-            loading = false
+            if (resultNo == nu) {                // PK-2：只展示最后发起的那次查询
+                result = r
+                loading = false
+            }
         }
     }
 
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().imePadding(),   // UI-4：键盘不遮输入框/结果
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -147,15 +158,19 @@ fun PickupScreen() {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = { doQuery(trackingNo) },
+                            enabled = !loading,          // PK-2：查询中禁用
                             modifier = Modifier.weight(1f),
-                        ) { Text("查询物流") }
+                        ) { Text(if (loading) "查询中…" else "查询物流") }
                         OutlinedButton(
                             onClick = {
                                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE)
                                     as ClipboardManager
                                 val text = cm.primaryClip?.getItemAt(0)
                                     ?.coerceToText(context)?.toString().orEmpty()
-                                val nu = Regex("[A-Za-z0-9]{8,}").find(text.replace(" ", ""))?.value.orEmpty()
+                                // PK-5：归一化 + 取最长字母数字段（不再把网址当单号）
+                                val cleaned = ExpressApi.normalize(text)
+                                val nu = Regex("[A-Za-z0-9]{8,}").findAll(cleaned)
+                                    .map { it.value }.maxByOrNull { it.length }.orEmpty()
                                 if (nu.isEmpty()) {
                                     Toast.makeText(context, "剪贴板里没找到快递单号", Toast.LENGTH_SHORT).show()
                                 } else {

@@ -1,4 +1,5 @@
 package com.campusglass.schedule
+import androidx.compose.foundation.layout.heightIn
 
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -85,6 +86,7 @@ fun ScheduleScreen() {
     var showAdd by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<Course?>(null) }
     var editTarget by remember { mutableStateOf<Course?>(null) }
+    var pendingDeleteAll by remember { mutableStateOf<Course?>(null) }   // SC-6
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -103,8 +105,10 @@ fun ScheduleScreen() {
             }
 
             item {
+                // SC-3：周次芯片动态扩展，包含当前周与已有课程的周次
+                val maxWeek = maxOf(20, week, courses.flatMap { it.weeks }.maxOrNull() ?: 20)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items((1..20).toList()) { w ->
+                    items((1..maxWeek).toList()) { w ->
                         FilterChip(
                             selected = week == w,
                             onClick = { week = w },
@@ -155,14 +159,37 @@ fun ScheduleScreen() {
                         detail = null
                     }) { Text("删除该时段") }
                     TextButton(onClick = {
-                        courses = courses.filterNot { it.name == c.name }
-                        ScheduleStore.saveCourses(context, courses)
+                        pendingDeleteAll = c      // SC-6：二次确认
                         detail = null
                     }) { Text("删除同名") }
                 }
             },
             dismissButton = {
                 TextButton(onClick = { detail = null }) { Text("关闭") }
+            },
+        )
+    }
+
+    // SC-6：删除同名二次确认
+    pendingDeleteAll?.let { c ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteAll = null },
+            title = { Text("删除同名课程？") },
+            text = {
+                Text(
+                    "将删除「${c.name}」的全部时段（同名课程会一起删，如两节同名体育）。确定吗？",
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    courses = courses.filterNot { it.name == c.name }
+                    ScheduleStore.saveCourses(context, courses)
+                    pendingDeleteAll = null
+                }) { Text("确定删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteAll = null }) { Text("取消") }
             },
         )
     }
@@ -177,8 +204,8 @@ fun ScheduleScreen() {
             },
             onSave = { newOnes ->
                 if (editTarget != null) {
-                    courses = courses - editTarget!! + newOnes.first()
-                    Toast.makeText(context, "已更新：${newOnes.first().name}", Toast.LENGTH_SHORT).show()
+                    courses = courses - editTarget!! + newOnes      // SC-1：保存全部时段，不再丢弃
+                    Toast.makeText(context, "已更新：${newOnes.first().name}（${newOnes.size} 个时段）", Toast.LENGTH_SHORT).show()
                 } else {
                     courses = courses + newOnes
                     Toast.makeText(context, "已添加：${newOnes.first().name}（${newOnes.size} 个时段）", Toast.LENGTH_SHORT).show()
@@ -315,7 +342,7 @@ private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Un
 
 @Composable
 private fun CourseBlock(c: Course, modifier: Modifier, onCourse: (Course) -> Unit) {
-    val color = PALETTE[(c.name.hashCode() * 31 + c.weekday * 7 + c.startPeriod).let { if (it < 0) -it else it } % PALETTE.size]
+    val color = PALETTE[Math.floorMod(c.name.hashCode() * 31 + c.weekday * 7 + c.startPeriod, PALETTE.size)]   // SC-8
     val scale = listOf(0.85f, 1f, 1.2f)[ThemePrefs.scheduleFontScale.value]
     val base = MaterialTheme.typography.labelSmall
     val style = base.copy(fontSize = base.fontSize * scale)
@@ -427,6 +454,7 @@ private fun AddCourseDialog(
         )
     }
     var parity by remember { mutableIntStateOf(0) }
+    var errorText by remember { mutableStateOf("") }   // UI-13：必填/冲突反馈
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -434,10 +462,14 @@ private fun AddCourseDialog(
         text = {
             Column(
                 Modifier
-                    .height(480.dp)
+                    .heightIn(max = 480.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (errorText.isNotBlank()) {
+                    Text(errorText, color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall)
+                }
                 OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), singleLine = true,
                     label = { Text("课程名（必填）") })
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -530,15 +562,27 @@ private fun AddCourseDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    if (name.isBlank()) return@Button
-                    val weeks = ScheduleStore.parseWeeks(weeksText)
-                        .filter { w ->
-                            when (parity) {
-                                1 -> w % 2 == 1
-                                2 -> w % 2 == 0
-                                else -> true
-                            }
-                        }.toSet().ifEmpty { (1..16).toSet() }
+                    if (name.isBlank()) {
+                        errorText = "请填写课程名（必填）"
+                        return@Button
+                    }
+                    val parsed = ScheduleStore.parseWeeks(weeksText)
+                    val filtered = parsed.filter { w ->
+                        when (parity) {
+                            1 -> w % 2 == 1
+                            2 -> w % 2 == 0
+                            else -> true
+                        }
+                    }.toSet()
+                    // SC-2：只有周次完全没填才兜底 1-16；奇偶冲突明确报错，不再反向兜底
+                    val weeks = when {
+                        filtered.isNotEmpty() -> filtered
+                        parsed.isEmpty() && parity == 0 -> (1..16).toSet()
+                        else -> {
+                            errorText = "周次与单/双周设置冲突（例如填了奇数周却选了双周），请调整"
+                            return@Button
+                        }
+                    }
                     onSave(
                         slots.map { s ->
                             Course(

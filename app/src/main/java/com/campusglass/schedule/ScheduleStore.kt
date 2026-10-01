@@ -64,10 +64,12 @@ object PeriodTable {
         prefs(c).edit().putInt("periodsPerDay", n.coerceIn(1, MAX_PERIODS)).apply()
     }
 
-    /** 由开始时间反查最接近的节次（ICS 备用） */
+    /** 由开始时间反查最接近的节次（SC-7：未设置节次安全跳过，不再崩溃） */
     fun periodOfTime(c: Context, t: LocalTime): Int {
-        val times = all(c).map {
-            LocalTime.parse(it.substringBefore("-")) to LocalTime.parse(it.substringAfter("-"))
+        val times = all(c).mapNotNull {
+            runCatching {
+                LocalTime.parse(it.substringBefore("-")) to LocalTime.parse(it.substringAfter("-"))
+            }.getOrNull()
         }
         return times.indexOfFirst { !it.first.isAfter(t) && !it.second.isBefore(t) }
             .let { if (it >= 0) it + 1 else 1 }
@@ -81,18 +83,21 @@ object ScheduleStore {
 
     fun loadCourses(c: Context): List<Course> = runCatching {
         val arr = JSONArray(prefs(c).getString("courses", "[]"))
-        (0 until arr.length()).map { i ->
-            val o = arr.getJSONObject(i)
-            Course(
-                id = o.optString("id", UUID.randomUUID().toString()),
-                name = o.getString("name"),
-                teacher = o.optString("teacher"),
-                location = o.optString("location"),
-                weekday = o.getInt("weekday"),
-                startPeriod = o.getInt("start"),
-                endPeriod = o.getInt("end"),
-                weeks = parseWeeks(o.optString("weeks")),
-            )
+        // SC-5：单条损坏不影响整张课表，坏条目跳过
+        (0 until arr.length()).mapNotNull { i ->
+            runCatching {
+                val o = arr.getJSONObject(i)
+                Course(
+                    id = o.optString("id", UUID.randomUUID().toString()),
+                    name = o.getString("name"),
+                    teacher = o.optString("teacher"),
+                    location = o.optString("location"),
+                    weekday = o.getInt("weekday"),
+                    startPeriod = o.getInt("start"),
+                    endPeriod = o.getInt("end"),
+                    weeks = parseWeeks(o.optString("weeks")),
+                )
+            }.getOrNull()
         }
     }.getOrDefault(emptyList())
 

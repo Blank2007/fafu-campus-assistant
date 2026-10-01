@@ -1,4 +1,5 @@
 package com.campusglass.ui.settings
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.size
@@ -90,6 +91,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
+    "v3.3.zilyf · 2026-10-02 00:40" to "【DeepSeek 审查报告修复】P0 全修：查无结果误判已签收、主题色透明/重启丢失/二次应用；快递状态码补全+网络故障区分+单号归一；课表多时段编辑/单双周冲突/周次上限/单条容错/删除确认；公交末班车入表+文案修正；键盘遮挡/状态栏图标跟随主题/弹窗横屏不裁/开关行可点/输入校验反馈；移除冗余敏感权限+关闭云备份",
     "v3.2.zilyf · 2026-10-01 01:15" to "APP 图标重新设计（渐变+学士帽自适应图标）；官网加小图标；关于页 GitHub 头像（点击可访问）；全量盘查：周次编辑格式修复、越界课程保护、安全性检查",
     "v3.1.zilyf · 2026-10-01 00:35" to "首页保留「首页」标题；官网卡片整体居中；版本号 v3.1.zilyf",
     "v3.0.zhy · 2026-10-01 00:25" to "【稳定版】首页精简：仅保留常用官网并整体居中",
@@ -174,6 +176,9 @@ fun SettingsScreen() {
                         }
                     }
                     Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { ThemePrefs.setAcrylic(context, !ThemePrefs.acrylicEnabled.value) },
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -286,6 +291,9 @@ fun SettingsScreen() {
                         }
                     }
                     Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { ThemePrefs.setShowWeekend(context, !ThemePrefs.showWeekend.value) },
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -495,13 +503,19 @@ private fun ColorPickerDialog(onDismiss: () -> Unit) {
     var b by remember { mutableFloatStateOf(base.blue * 255f) }
     var styleState by remember { mutableIntStateOf(ThemePrefs.colorStyle.value) }
     var tempState by remember { mutableFloatStateOf(ThemePrefs.colorTemp.value) }
-    val preview = com.campusglass.ui.theme.adjustColorStyle(Color((r.toInt() shl 16) or (g.toInt() shl 8) or b.toInt()))
+    val raw = Color(r.toInt(), g.toInt(), b.toInt())   // P0-2：三分量构造，不靠 Int 重载
+    val preview = com.campusglass.ui.theme.adjustColorStyle(raw, style = styleState, temp = tempState)
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("🎨 调色盘") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                Modifier
+                    .heightIn(max = 480.dp)          // UI-5：横屏/大字号不截断
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 Box(
                     Modifier
                         .fillMaxWidth()
@@ -514,10 +528,7 @@ private fun ColorPickerDialog(onDismiss: () -> Unit) {
                     listOf("标准", "鲜艳", "柔和").forEachIndexed { i, t ->
                         FilterChip(
                             selected = styleState == i,
-                            onClick = {
-                                styleState = i
-                                ThemePrefs.setColorStyle(context, i)
-                            },
+                            onClick = { styleState = i },   // SET-1：仅预览，确认才写盘
                             label = { Text(t) },
                         )
                     }
@@ -525,10 +536,7 @@ private fun ColorPickerDialog(onDismiss: () -> Unit) {
                 Text("色温（冷 ${if (tempState < 0) "❄" else if (tempState > 0) "🔥" else "—"} 暖）", style = MaterialTheme.typography.labelSmall)
                 Slider(
                     value = tempState,
-                    onValueChange = {
-                        tempState = it
-                        ThemePrefs.setColorTemp(context, it)
-                    },
+                    onValueChange = { tempState = it },   // SET-1：仅预览，确认才写盘
                     valueRange = -20f..20f,
                 )
                 HorizontalDivider()
@@ -546,7 +554,9 @@ private fun ColorPickerDialog(onDismiss: () -> Unit) {
         },
         confirmButton = {
             Button(onClick = {
-                ThemePrefs.setCustomColor(context, preview)
+                ThemePrefs.setColorStyle(context, styleState)
+                ThemePrefs.setColorTemp(context, tempState)
+                ThemePrefs.setCustomColor(context, raw)      // P0-4：存原始色，主题只应用一次 adjust
                 onDismiss()
             }) { Text("使用此色") }
         },
@@ -564,6 +574,7 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
     var perDayState by remember { mutableIntStateOf(PeriodTable.periodsPerDay(context)) }
     var perDayText by remember { mutableStateOf(PeriodTable.periodsPerDay(context).toString()) }   // 文本与状态分离，支持清空重输
     var termStartText by remember { mutableStateOf(ScheduleStore.termStart(context).toString()) }
+    var dateError by remember { mutableStateOf("") }   // SET-3
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -603,6 +614,10 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
                     Modifier.fillMaxWidth(), singleLine = true,
                     label = { Text("学期起始日（第一周的周日，如 2026-08-30）") },
                 )
+                if (dateError.isNotBlank()) {
+                    Text(dateError, color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall)
+                }
                 HorizontalDivider()
                 times.value.take(perDayState).forEachIndexed { i, t ->
                     val start = remember(t) { mutableStateOf(t.substringBefore("-")) }
@@ -610,11 +625,14 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
                     Text("第${i + 1}节", style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(start.value, { v: String ->
-                            start.value = v
+                            // SET-2：只允许数字和冒号，防止逗号/横杠破坏存储格式
+                            val nv = v.filter { ch -> ch.isDigit() || ch == ':' }.take(5)
+                            start.value = nv
                             times.value = times.value.toMutableList().also { it[i] = "${start.value}-${end.value}" }
                         }, Modifier.weight(1f), singleLine = true, label = { Text("上课") })
                         OutlinedTextField(end.value, { v: String ->
-                            end.value = v
+                            val nv = v.filter { ch -> ch.isDigit() || ch == ':' }.take(5)
+                            end.value = nv
                             times.value = times.value.toMutableList().also { it[i] = "${start.value}-${end.value}" }
                         }, Modifier.weight(1f), singleLine = true, label = { Text("下课") })
                     }
@@ -623,12 +641,19 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
         },
         confirmButton = {
             Button(onClick = {
+                // SET-3：日期校验反馈，不再静默吞异常
+                val d = runCatching { java.time.LocalDate.parse(termStartText) }.getOrNull()
+                if (d == null) {
+                    dateError = "日期格式不对，应为 2026-08-30（横杠分隔）"
+                    return@Button
+                }
+                dateError = ""
                 PeriodTable.save(context, times.value)
                 PeriodTable.setPeriodsPerDay(
                     context,
                     perDayText.toIntOrNull()?.coerceIn(1, 24) ?: perDayState,
                 )
-                runCatching { ScheduleStore.setTermStart(context, LocalDate.parse(termStartText)) }
+                ScheduleStore.setTermStart(context, d)
                 onDismiss()
             }) { Text("保存") }
         },
@@ -648,19 +673,32 @@ private fun checkUpdate(): String {
             conn.connectTimeout = 12_000
             conn.readTimeout = 12_000
             conn.requestMethod = "GET"
-            conn.setRequestProperty("User-Agent", "FAFU-Campus-Assistant/2.19")   // GitHub API 必须带
+            conn.setRequestProperty("User-Agent", "FAFU-Campus-Assistant/" + BuildConfig.VERSION_NAME)   // SET-4
             conn.setRequestProperty("Accept", "application/vnd.github+json")
             val code = conn.responseCode
+            if (code == 404) {
+                conn.disconnect()
+                lastErr = "未找到发布信息"
+                return@runCatching
+            }
             if (code != 200) {
+                conn.disconnect()
                 lastErr = "HTTP $code"
                 return@runCatching
             }
             val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-            val latest = json.optString("tag_name", "").removePrefix("v")
+            conn.disconnect()
+            val latest = json.optString("tag_name", "").removePrefix("v").removePrefix("V")
             val current = BuildConfig.VERSION_NAME
+            // SET-4：数字段比大小（兼容 3.2 / v3.2.0 / 3.2.zilyf 等写法），旧版不再误报
+            fun verParts(s: String) = s.split(Regex("[^0-9]+")).mapNotNull { it.toIntOrNull() }
+            val a = verParts(latest); val b = verParts(current)
+            val cmp = (0 until maxOf(a.size, b.size)).fold(0) { acc, i ->
+                if (acc != 0) acc else (a.getOrElse(i) { 0 } - b.getOrElse(i) { 0 })
+            }
             return when {
                 latest.isBlank() -> "没获取到版本信息，请稍后再试"
-                latest == current -> "已是最新版本（v$current）✅"
+                cmp <= 0 -> "已是最新版本（v$current）✅"
                 else -> "发现新版本 v$latest（当前 v$current）！点「去下载」更新"
             }
         }.onFailure { lastErr = it.message ?: "网络异常" }
