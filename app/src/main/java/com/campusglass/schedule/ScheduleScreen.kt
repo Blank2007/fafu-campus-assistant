@@ -87,7 +87,37 @@ fun ScheduleScreen() {
     var detail by remember { mutableStateOf<Course?>(null) }
     var editTarget by remember { mutableStateOf<Course?>(null) }
     var pendingDeleteAll by remember { mutableStateOf<Course?>(null) }   // SC-6
-    var importCandidate by remember { mutableStateOf<Pair<String, List<Course>>?>(null) }   // 分享导入
+    var importCandidate by remember { mutableStateOf<Pair<String, List<Course>>?>(null) }   // （保留兼容）
+    var showImport by remember { mutableStateOf(false) }
+    var importText by remember { mutableStateOf("") }
+    var importError by remember { mutableStateOf("") }
+
+    fun doImport(merge: Boolean) {
+        val parsed = ScheduleShare.decode(importText)
+        if (parsed == null) {
+            importError = "分享码无效或不完整，请重新粘贴完整的分享码"
+            return
+        }
+        val (termStart, imported) = parsed
+        if (merge) {
+            val dedup = imported.filterNot { imp ->
+                courses.any {
+                    it.name == imp.name && it.weekday == imp.weekday &&
+                        it.startPeriod == imp.startPeriod
+                }
+            }
+            courses = courses + dedup
+            Toast.makeText(context, "已合并导入 ${dedup.size} 个时段", Toast.LENGTH_SHORT).show()
+        } else {
+            courses = imported
+            Toast.makeText(context, "已替换为分享的课表", Toast.LENGTH_SHORT).show()
+        }
+        ScheduleStore.saveCourses(context, courses)
+        if (termStart.isNotBlank()) {
+            runCatching { ScheduleStore.setTermStart(context, java.time.LocalDate.parse(termStart)) }
+        }
+        showImport = false
+    }
 
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -124,20 +154,14 @@ fun ScheduleScreen() {
                     ) { Text("📤 分享课表") }
                     OutlinedButton(
                         onClick = {
+                            // 弹窗输入框导入；若剪贴板里已有分享码则预填（可修改）
                             val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
                                 as android.content.ClipboardManager
                             val text = cm.primaryClip?.getItemAt(0)
                                 ?.coerceToText(context)?.toString().orEmpty()
-                            val parsed = ScheduleShare.decode(text)
-                            if (parsed == null) {
-                                Toast.makeText(
-                                    context,
-                                    "剪贴板里没找到课表分享码（FAFUSCH1: 开头），请先复制同学发的分享码",
-                                    Toast.LENGTH_LONG,
-                                ).show()
-                            } else {
-                                importCandidate = parsed
-                            }
+                            importText = if (text.contains("FAFUSCH1:")) text else ""
+                            importError = ""
+                            showImport = true
                         },
                         modifier = Modifier.weight(1f),
                     ) { Text("📥 导入课表") }
@@ -242,64 +266,39 @@ fun ScheduleScreen() {
         )
     }
 
-    // 导入确认（合并 / 替换）
-    importCandidate?.let { (termStart, imported) ->
+    // 导入弹窗：输入框 + 合并/替换（不再强制读剪贴板）
+    if (showImport) {
         AlertDialog(
-            onDismissRequest = { importCandidate = null },
+            onDismissRequest = { showImport = false },
             title = { Text("📥 导入课表") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        "识别到 ${imported.size} 个时段（共 ${imported.map { it.name }.distinct().size} 门课）",
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    if (termStart.isNotBlank()) {
-                        Text(
-                            "分享者的学期起始日：$termStart",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (importError.isNotBlank()) {
+                        Text(importError, color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall)
                     }
-                    Text("合并＝加到现有课表后（重复时段自动去重）；替换＝清空现有后导入。",
+                    Text("粘贴同学发的分享码（FAFUSCH1: 开头）：",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSurface)
+                    OutlinedTextField(
+                        value = importText,
+                        onValueChange = { importText = it; importError = "" },
+                        Modifier.fillMaxWidth().heightIn(max = 120.dp),
+                        label = { Text("分享码") },
                     )
+                    Text("合并＝加到现有课表后（重复自动去重）；替换＝清空现有后导入。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                 }
             },
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = {
-                        val dedup = imported.filterNot { imp ->
-                            courses.any {
-                                it.name == imp.name && it.weekday == imp.weekday &&
-                                    it.startPeriod == imp.startPeriod
-                            }
-                        }
-                        courses = courses + dedup
-                        ScheduleStore.saveCourses(context, courses)
-                        if (termStart.isNotBlank()) {
-                            runCatching {
-                                ScheduleStore.setTermStart(context, java.time.LocalDate.parse(termStart))
-                            }
-                        }
-                        importCandidate = null
-                        Toast.makeText(context, "已合并导入 ${dedup.size} 个时段", Toast.LENGTH_SHORT).show()
-                    }) { Text("合并导入") }
-                    TextButton(onClick = {
-                        courses = imported
-                        ScheduleStore.saveCourses(context, courses)
-                        if (termStart.isNotBlank()) {
-                            runCatching {
-                                ScheduleStore.setTermStart(context, java.time.LocalDate.parse(termStart))
-                            }
-                        }
-                        importCandidate = null
-                        Toast.makeText(context, "已替换为分享的课表", Toast.LENGTH_SHORT).show()
-                    }) { Text("替换导入") }
+                    TextButton(onClick = { doImport(true) }) { Text("合并导入") }
+                    TextButton(onClick = { doImport(false) }) { Text("替换导入") }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { importCandidate = null }) { Text("取消") }
+                TextButton(onClick = { showImport = false }) { Text("取消") }
             },
         )
     }

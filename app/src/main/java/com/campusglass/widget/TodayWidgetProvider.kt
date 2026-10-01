@@ -63,6 +63,19 @@ class TodayWidgetProvider : AppWidgetProvider() {
                     rv.addView(R.id.widget_rows, row)
                 }
             }
+            // 点击小部件 → 直达 App 课表页
+            val openIntent = android.content.Intent(context, com.campusglass.MainActivity::class.java)
+                .putExtra("openTab", "schedule")
+                .addFlags(
+                    android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                        android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+                )
+            val pi = android.app.PendingIntent.getActivity(
+                context, 0, openIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+                    android.app.PendingIntent.FLAG_IMMUTABLE,
+            )
+            rv.setOnClickPendingIntent(R.id.widget_root, pi)
             mgr.updateAppWidget(id, rv)
         }
     }

@@ -86,40 +86,81 @@ object ScheduleShare {
     }
 
     fun encode(courses: List<Course>, termStart: String): String {
+        // 紧凑数组 + Deflate 压缩，分享码长度缩短一半以上
         val arr = JSONArray()
         courses.forEach { c ->
-            arr.put(JSONObject().apply {
-                put("name", c.name)
-                put("teacher", c.teacher)
-                put("location", c.location)
-                put("weekday", c.weekday)
-                put("start", c.startPeriod)
-                put("end", c.endPeriod)
-                put("weeks", compactWeeks(c.weeks))
-            })
+            arr.put(
+                JSONArray().put(c.name).put(c.teacher).put(c.location)
+                    .put(c.weekday).put(c.startPeriod).put(c.endPeriod).put(compactWeeks(c.weeks))
+            )
         }
-        val json = JSONObject().apply {
-            put("v", 1)
-            put("termStart", termStart)
-            put("courses", arr)
-        }.toString()
+        val json = JSONArray().put(termStart).put(arr).toString()
+        val compressed = deflate(json.toByteArray(Charsets.UTF_8))
         return PREFIX + android.util.Base64.encodeToString(
-            json.toByteArray(Charsets.UTF_8),
+            compressed,
             android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP,
         )
     }
 
-    /** 从任意文本中识别分享码 → (学期起始日, 课程列表)；识别不到返回 null */
+    private fun deflate(bytes: ByteArray): ByteArray = runCatching {
+        val d = java.util.zip.Deflater(java.util.zip.Deflater.BEST_COMPRESSION)
+        d.setInput(bytes); d.finish()
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(1024)
+        while (!d.finished()) out.write(buf, 0, d.deflate(buf))
+        d.end()
+        out.toByteArray()
+    }.getOrDefault(bytes)
+
+    private fun inflate(bytes: ByteArray): ByteArray? = runCatching {
+        val inf = java.util.zip.Inflater()
+        inf.setInput(bytes)
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(1024)
+        while (!inf.finished()) {
+            val n = inf.inflate(buf)
+            if (n == 0) break
+            out.write(buf, 0, n)
+        }
+        inf.end()
+        out.toByteArray().takeIf { it.isNotEmpty() }
+    }.getOrNull()
+
+    /** 从任意文本识别分享码；兼容新（压缩）旧（明文 JSON）两种格式 */
     fun decode(text: String): Pair<String, List<Course>>? {
         val idx = text.indexOf(PREFIX)
         if (idx < 0) return null
         val code = text.substring(idx + PREFIX.length).trim().split(Regex("\\s")).firstOrNull().orEmpty()
         if (code.isBlank()) return null
-        val json = runCatching {
-            String(android.util.Base64.decode(code, android.util.Base64.URL_SAFE), Charsets.UTF_8)
+        val rawBytes = runCatching {
+            android.util.Base64.decode(code, android.util.Base64.URL_SAFE)
         }.getOrNull() ?: return null
+        val bodyBytes = inflate(rawBytes) ?: rawBytes     // 新格式压缩；旧格式原样
+        val body = String(bodyBytes, Charsets.UTF_8)
         return runCatching {
-            val o = JSONObject(json)
+            // 新格式：[termStart, [[name,teacher,loc,weekday,start,end,weeks], ...]]
+            runCatching { JSONArray(body) }.getOrNull()?.let { a ->
+                if (a.length() >= 2 && a.optJSONArray(1) != null) {
+                    val term = a.optString(0)
+                    val list = (0 until a.getJSONArray(1).length()).mapNotNull { i ->
+                        runCatching {
+                            val c = a.getJSONArray(1).getJSONArray(i)
+                            Course(
+                                name = c.getString(0),
+                                teacher = c.optString(1),
+                                location = c.optString(2),
+                                weekday = c.getInt(3),
+                                startPeriod = c.getInt(4),
+                                endPeriod = c.getInt(5),
+                                weeks = ScheduleStore.parseWeeks(c.optString(6)),
+                            )
+                        }.getOrNull()
+                    }
+                    if (list.isNotEmpty()) return term to list
+                }
+            }
+            // 旧格式：{"termStart":..,"courses":[{..}]}
+            val o = JSONObject(body)
             val arr = o.optJSONArray("courses") ?: JSONArray()
             val list = (0 until arr.length()).mapNotNull { i ->
                 runCatching {

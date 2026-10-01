@@ -97,6 +97,7 @@ class MainActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
         super.onCreate(savedInstanceState)
+        WidgetNav.pendingTab.value = intent?.getStringExtra("openTab")   // 小部件带参直达
         ThemePrefs.load(this)
         setContent {
             CampusGlassTheme {
@@ -104,6 +105,11 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
+
+/** 小部件 → App 页面跳转信号 */
+object WidgetNav {
+    val pendingTab = androidx.compose.runtime.mutableStateOf<String?>(null)
 }
 
 private enum class Tab(val label: String, val icon: ImageVector) {
@@ -120,6 +126,13 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 @Composable
 fun CampusGlassApp() {
     var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
+    // 小部件点击直达课表页
+    androidx.compose.runtime.LaunchedEffect(WidgetNav.pendingTab.value) {
+        WidgetNav.pendingTab.value?.let { k ->
+            tab = homeTabOf(k)
+            WidgetNav.pendingTab.value = null
+        }
+    }
     val glass = rememberGlassState()
     val dark = when (ThemePrefs.themeMode.value) {
         ThemePrefs.ThemeMode.DARK -> true
