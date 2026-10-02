@@ -40,11 +40,15 @@ object Hitokoto {
         return q
     }
 
-    /** 强制换一句（小部件点击）；后台线程调用。避免换到同一句 */
+    /** 强制换一句（小部件点击/首页每次打开）；后台线程调用。连拉最多 3 次确保不是同一句 */
     fun fetchNew(c: Context): Quote? {
         val old = prefs(c).getString("text", "")
-        var q = fetch()
-        if (q != null && q.text == old) q = fetch() ?: q
+        var q: Quote? = null
+        for (i in 0 until 3) {
+            val f = fetch() ?: continue
+            q = f
+            if (f.text != old) break
+        }
         if (q != null) save(c, q)
         return q
     }
@@ -52,9 +56,11 @@ object Hitokoto {
     /** 每次打开 App 拉一句新的（首页）；后台线程调用 */
     fun fetchFresh(c: Context): Quote? = fetchNew(c)
 
-    /** 诗词 + 文学分类 */
+    /** 诗词 + 文学分类；时间戳破接口缓存（同一请求会返回同一句） */
     private fun fetch(): Quote? = runCatching {
-        val conn = URL("https://v1.hitokoto.cn/?c=i&c=d&encode=json")
+        val conn = URL(
+            "https://v1.hitokoto.cn/?c=i&c=d&encode=json&_=${System.currentTimeMillis()}"
+        )
             .openConnection() as HttpURLConnection
         conn.connectTimeout = 8_000
         conn.readTimeout = 8_000

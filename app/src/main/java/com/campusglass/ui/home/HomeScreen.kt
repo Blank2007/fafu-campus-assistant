@@ -5,6 +5,7 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,21 +38,24 @@ private val schoolSites = listOf(
 )
 
 /**
- * 首页（v3.8）：「首页」标题 + 官网卡片（居中）+ 独立每日一句卡片（点击复制，每次打开刷新）。
+ * 首页（v3.9）：「首页」标题 + 居中板块（官网卡片 + 每日一句卡片）。
+ * 每日一句每次打开自动刷新；点击复制。
  */
 @Composable
 fun HomeScreen(onGoto: (String) -> Unit) {
     val context = LocalContext.current
 
-    // 每日一句：每次打开 App 自动拉新句
+    // 每次打开 App 自动拉一句新的（时间戳破缓存，连拉确保不同句）
     var quote by remember { mutableStateOf(com.campusglass.home.Hitokoto.cached(context)) }
     LaunchedEffect(Unit) {
         quote = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            com.campusglass.home.Hitokoto.fetchFresh(context) ?: com.campusglass.home.Hitokoto.cached(context)
+            com.campusglass.home.Hitokoto.fetchFresh(context)
+                ?: com.campusglass.home.Hitokoto.cached(context)
         }
     }
 
     Column(Modifier.fillMaxSize()) {
+        // 标题保留
         Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp)) {
             Text(
                 "首页",
@@ -60,101 +64,118 @@ fun HomeScreen(onGoto: (String) -> Unit) {
             )
         }
 
-        Column(
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+        // 板块整体居中（内容超高时可滚动）
+        Box(
+            Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
         ) {
-            // 官网卡片
-            AcrylicCard(
+            Column(
                 Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 380.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Column(
-                    Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                // 官网卡片
+                AcrylicCard(
+                    Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 380.dp)
                 ) {
-                    Text("🏫 常用官网", style = MaterialTheme.typography.titleMedium)
-                    schoolSites.forEach { (name, url) ->
-                        OutlinedButton(
-                            onClick = {
-                                runCatching {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    Column(
+                        Modifier.padding(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text("🏫 常用官网", style = MaterialTheme.typography.titleMedium)
+                        schoolSites.forEach { (name, url) ->
+                            OutlinedButton(
+                                onClick = {
+                                    runCatching {
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(name)
+                                    Text(
+                                        url,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                    )
                                 }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(name)
-                                Text(
-                                    url,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                )
                             }
                         }
+                        Text(
+                            "点击在浏览器打开（已核实可访问）",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                        )
                     }
-                    Text(
-                        "点击在浏览器打开（已核实可访问）",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                    )
                 }
-            }
 
-            // 每日一句（独立卡片，点击复制）
-            AcrylicCard(
-                Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 380.dp)
-                    .clickable {
-                        if (quote != null) {
-                            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
-                                as android.content.ClipboardManager
-                            cm.setPrimaryClip(
-                                android.content.ClipData.newPlainText(
-                                    "每日一句", "「${quote!!.text}」 —— ${quote!!.from}"
+                // 每日一句卡片：标题居中 · 正文靠左 · 来源靠右 · 提示居中 · 点击复制
+                AcrylicCard(
+                    Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 380.dp)
+                        .clickable {
+                            if (quote != null) {
+                                val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                    as android.content.ClipboardManager
+                                cm.setPrimaryClip(
+                                    android.content.ClipData.newPlainText(
+                                        "每日一句", "「${quote!!.text}」 —— ${quote!!.from}"
+                                    )
                                 )
-                            )
-                            Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-            ) {
-                Column(
-                    Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                                Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+                            }
+                        },
                 ) {
-                    Text("📜 每日一句", style = MaterialTheme.typography.titleSmall)
-                    if (quote != null) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
                         Text(
-                            "「${quote!!.text}」",
-                            style = MaterialTheme.typography.bodyMedium,
+                            "📜 每日一句",
+                            Modifier.fillMaxWidth(),
                             textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.titleSmall,
                         )
-                        Text(
-                            "—— ${quote!!.from}",
-                            style = MaterialTheme.typography.bodySmall,
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        )
-                        Text(
-                            "点一下复制",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
-                        )
-                    } else {
-                        Text(
-                            "（联网后自动加载）",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                        )
+                        if (quote != null) {
+                            Text(
+                                "「${quote!!.text}」",
+                                Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Start,          // 正文靠左
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                "—— ${quote!!.from}",
+                                Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.End,            // 来源另起一行靠右
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            )
+                            Text(
+                                "点一下复制",
+                                Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center,         // 提示居中
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                            )
+                        } else {
+                            Text(
+                                "（联网后自动加载）",
+                                Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            )
+                        }
                     }
                 }
             }

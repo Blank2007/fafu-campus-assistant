@@ -78,19 +78,19 @@ import java.time.LocalDate
 private data class Credit(val name: String, val author: String, val url: String, val license: String, val usage: String)
 
 private val credits = listOf(
-    Credit("WakeUp 课程表（WakeupSchedule_Kotlin）", "YZune", "https://github.com/YZune/WakeUpSchedule", "Apache-2.0", "间接参考：周课表格 UI 设计思路（未复制源码）"),
     Credit("ling_QuickShortcut（快递身份码快捷方式）", "qinyuanxin132", "https://github.com/qinyuanxin132/ling_QuickShortcut", "MIT", "间接参考：拼多多【身份码】跳转思路"),
-    Credit("拼多多 Scheme 公开资料", "社区整理（CSDN）", "https://blog.csdn.net/weixin_48141487/article/details/140077257", "公开资料 / 合理引用", "间接参考：拼多多页面拉起路径"),
     Credit("支付宝菜鸟小程序取件码", "V2EX 社区实测", "https://v2ex.com/t/1002900", "公开资料 / 合理引用", "取件码直达：alipays 小程序 appId"),
     Credit("建阳公交线路通告", "武夷发展集团·建阳区公交公司（大武夷新闻网）", "https://www.greatwuyi.com/guangg/content/202508/27/c1555764.html", "公开资讯 / 合理引用", "公交数据：103/105/107 路站点与时刻"),
     Credit("无敌电动公交数据", "modiauto.com.cn", "https://www.modiauto.com.cn/cx/bus_142302.html", "公开资讯 / 合理引用", "公交发车时刻核实（2026-08/09）"),
     Credit("Haze（亚克力模糊）", "Chris Banes", "https://github.com/chrisbanes/haze", "Apache-2.0", "直接依赖：亚克力模糊材质"),
+    Credit("一言 Hitokoto", "hitokoto.cn", "https://hitokoto.cn", "CC BY-NC 4.0 等（随句来源）", "每日一句诗词/文学接口（首页与小部件）"),
     Credit("快递100", "深圳前海百递网络", "https://www.kuaidi100.com", "平台服务（查询接口）", "快递物流轨迹查询接口"),
     Credit("Jetpack Compose / AndroidX", "Google & AOSP", "https://android.googlesource.com/platform/frameworks/support", "Apache-2.0", "直接依赖：Material 3 UI、原生动画"),
     Credit("Kotlin", "JetBrains", "https://github.com/JetBrains/kotlin", "Apache-2.0", "直接依赖：开发语言"),
 )
 
 private val changelog = listOf(
+    "v3.9.zilyf · 2026-10-03 00:55" to "每日一句每次打开真刷新（时间戳破接口缓存+三连拉防重复）；首页板块垂直居中；诗句排版（正文靠左/来源靠右/提示居中）；致谢清理（移除未用、新增一言）",
     "v3.8.zilyf · 2026-10-03 00:35" to "明日无课文案修正；诗词点击换句修复（防重复+立即反馈）；首页诗词独立卡片（点击复制+每次打开自动刷新）；检查更新显示更新日志",
     "v3.7.zilyf · 2026-10-03 00:25" to "小部件无课居中显示「今日无课」；接入一言每日诗句（小部件底部+首页显示，点小部件诗句可换一句）",
     "v3.6.zilyf · 2026-10-02 01:35" to "小部件：深/浅双背景（跟随系统深色模式）；右上角箭头一键切换今日/明日课表",
