@@ -40,12 +40,17 @@ object Hitokoto {
         return q
     }
 
-    /** 强制换一句（小部件点击"换一句"）；后台线程调用 */
+    /** 强制换一句（小部件点击）；后台线程调用。避免换到同一句 */
     fun fetchNew(c: Context): Quote? {
-        val q = fetch() ?: return null
-        save(c, q)
+        val old = prefs(c).getString("text", "")
+        var q = fetch()
+        if (q != null && q.text == old) q = fetch() ?: q
+        if (q != null) save(c, q)
         return q
     }
+
+    /** 每次打开 App 拉一句新的（首页）；后台线程调用 */
+    fun fetchFresh(c: Context): Quote? = fetchNew(c)
 
     /** 诗词 + 文学分类 */
     private fun fetch(): Quote? = runCatching {

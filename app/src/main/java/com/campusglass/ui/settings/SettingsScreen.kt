@@ -91,6 +91,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
+    "v3.8.zilyf · 2026-10-03 00:35" to "明日无课文案修正；诗词点击换句修复（防重复+立即反馈）；首页诗词独立卡片（点击复制+每次打开自动刷新）；检查更新显示更新日志",
     "v3.7.zilyf · 2026-10-03 00:25" to "小部件无课居中显示「今日无课」；接入一言每日诗句（小部件底部+首页显示，点小部件诗句可换一句）",
     "v3.6.zilyf · 2026-10-02 01:35" to "小部件：深/浅双背景（跟随系统深色模式）；右上角箭头一键切换今日/明日课表",
     "v3.5.zilyf · 2026-10-02 01:25" to "小部件点击直达课表页；分享码压缩+紧凑编码（缩短一半以上）；导入改弹窗输入框（可编辑，不再强制读剪贴板）",
@@ -693,6 +694,7 @@ private fun checkUpdate(): String {
             val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
             conn.disconnect()
             val latest = json.optString("tag_name", "").removePrefix("v").removePrefix("V")
+            val body = json.optString("body", "").trim()      // 更新日志
             val current = BuildConfig.VERSION_NAME
             // SET-4：数字段比大小（兼容 3.2 / v3.2.0 / 3.2.zilyf 等写法），旧版不再误报
             fun verParts(s: String) = s.split(Regex("[^0-9]+")).mapNotNull { it.toIntOrNull() }
@@ -703,7 +705,8 @@ private fun checkUpdate(): String {
             return when {
                 latest.isBlank() -> "没获取到版本信息，请稍后再试"
                 cmp <= 0 -> "已是最新版本（v$current）✅"
-                else -> "发现新版本 v$latest（当前 v$current）！点「去下载」更新"
+                else -> "发现新版本 v$latest（当前 v$current）！点「去下载」更新" +
+                    if (body.isNotBlank()) "\n\n📋 更新日志：\n" + body.take(800) else ""
             }
         }.onFailure { lastErr = it.message ?: "网络异常" }
     }

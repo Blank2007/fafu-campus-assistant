@@ -1,29 +1,32 @@
 package com.campusglass.ui.home
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.text.style.TextAlign
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.campusglass.ui.glass.AcrylicCard
-import com.campusglass.ui.widgets.ScreenHeader
 
 /** 农大常用网站（已核实可访问） */
 private val schoolSites = listOf(
@@ -34,36 +37,38 @@ private val schoolSites = listOf(
 )
 
 /**
- * 首页（v3 稳定版）：仅保留常用官网，整体居中。
+ * 首页（v3.8）：「首页」标题 + 官网卡片（居中）+ 独立每日一句卡片（点击复制，每次打开刷新）。
  */
 @Composable
 fun HomeScreen(onGoto: (String) -> Unit) {
     val context = LocalContext.current
 
-    // 每日一句（一言）
-    var quote by remember {
-        mutableStateOf(com.campusglass.home.Hitokoto.cached(context))
-    }
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        if (quote == null) {
-            quote = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                com.campusglass.home.Hitokoto.fetchToday(context)
-            }
+    // 每日一句：每次打开 App 自动拉新句
+    var quote by remember { mutableStateOf(com.campusglass.home.Hitokoto.cached(context)) }
+    LaunchedEffect(Unit) {
+        quote = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            com.campusglass.home.Hitokoto.fetchFresh(context) ?: com.campusglass.home.Hitokoto.cached(context)
         }
     }
 
     Column(Modifier.fillMaxSize()) {
-        // 标题保留
         Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp)) {
-            ScreenHeader("首页")
+            Text(
+                "首页",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
         }
-        // 官网区域整体居中（占据剩余空间）
-        Box(
+
+        Column(
             Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp),
-            contentAlignment = Alignment.Center,
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // 官网卡片
             AcrylicCard(
                 Modifier
                     .fillMaxWidth()
@@ -99,12 +104,56 @@ fun HomeScreen(onGoto: (String) -> Unit) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                     )
+                }
+            }
+
+            // 每日一句（独立卡片，点击复制）
+            AcrylicCard(
+                Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 380.dp)
+                    .clickable {
+                        if (quote != null) {
+                            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                as android.content.ClipboardManager
+                            cm.setPrimaryClip(
+                                android.content.ClipData.newPlainText(
+                                    "每日一句", "「${quote!!.text}」 —— ${quote!!.from}"
+                                )
+                            )
+                            Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+            ) {
+                Column(
+                    Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text("📜 每日一句", style = MaterialTheme.typography.titleSmall)
                     if (quote != null) {
                         Text(
-                            "📜「${quote!!.text}」 —— ${quote!!.from}",
+                            "「${quote!!.text}」",
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            "—— ${quote!!.from}",
                             style = MaterialTheme.typography.bodySmall,
                             textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        )
+                        Text(
+                            "点一下复制",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                        )
+                    } else {
+                        Text(
+                            "（联网后自动加载）",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                         )
                     }
                 }

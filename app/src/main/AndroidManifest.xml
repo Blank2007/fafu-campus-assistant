@@ -54,6 +54,8 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.campusglass.WIDGET_NEXT" />
+                <action android:name="com.campusglass.WIDGET_QUOTE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"

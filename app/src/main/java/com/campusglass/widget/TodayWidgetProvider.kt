@@ -32,7 +32,15 @@ class TodayWidgetProvider : AppWidgetProvider() {
                 }
             }
             ACTION_QUOTE -> {
-                refreshQuoteAsync(context, force = true)
+                // 换一句：立即后台拉新句并重绘（避免拉到同一句）
+                val pr = goAsync()
+                Thread {
+                    runCatching {
+                        Hitokoto.fetchFresh(context)
+                        pushUpdate(context)
+                    }
+                    pr.finish()
+                }.start()
                 return
             }
         }
@@ -114,8 +122,12 @@ class TodayWidgetProvider : AppWidgetProvider() {
             rv.removeAllViews(R.id.widget_rows)
 
             if (courses.isEmpty()) {
-                // 无课：居中显示「今日无课」
+                // 无课：居中显示（区分今日/明日）
                 val empty = RemoteViews(context.packageName, R.layout.widget_empty_row)
+                empty.setTextViewText(
+                    R.id.empty_text,
+                    if (offset == 0) "今日无课" else "明日无课",
+                )
                 empty.setInt(R.id.empty_text, "setTextColor", titleColor)
                 rv.addView(R.id.widget_rows, empty)
             } else {
