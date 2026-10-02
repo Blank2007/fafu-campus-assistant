@@ -175,6 +175,13 @@ fun ScheduleScreen() {
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                 )
             }
+            item {
+                Text(
+                    "💡 桌面小部件在部分系统上需长按小部件才能强制刷新课表",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                )
+            }
 
             item {
                 // SC-3：周次芯片动态扩展，包含当前周与已有课程的周次
@@ -382,6 +389,12 @@ private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Un
                                 style = MaterialTheme.typography.labelSmall,
                                 fontSize = 7.sp,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                            )
+                            Text(
+                                PeriodTable.endStr(context, p),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 7.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
                             )
                         }
                     }

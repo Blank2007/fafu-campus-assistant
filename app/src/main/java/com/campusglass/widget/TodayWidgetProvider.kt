@@ -136,26 +136,40 @@ class TodayWidgetProvider : AppWidgetProvider() {
                     row.setInt(R.id.row_time, "setTextColor", timeColor)
                     row.setInt(R.id.row_name, "setTextColor", titleColor)
                     row.setInt(R.id.row_loc, "setTextColor", subColor)
-                    val time = runCatching { PeriodTable.startStr(context, c.startPeriod) }.getOrDefault("")
-                    row.setTextViewText(R.id.row_time, time)
+                    val start = runCatching { PeriodTable.startStr(context, c.startPeriod) }.getOrDefault("")
+                    val end = runCatching { PeriodTable.endStr(context, c.endPeriod) }.getOrDefault("")
+                    row.setTextViewText(R.id.row_time, "$start\n$end")   // 上/下课时间都标
                     row.setTextViewText(R.id.row_name, c.name + "（第${c.startPeriod}-${c.endPeriod}节）")
                     row.setTextViewText(R.id.row_loc, c.location.ifBlank { c.teacher }.ifBlank { " " })
                     rv.addView(R.id.widget_rows, row)
                 }
             }
 
-            // 右上角箭头：今日 ⇄ 明日（经透明 Activity，点击 100% 生效）
-            fun widgetAction(op: String, reqCode: Int): android.app.PendingIntent =
-                android.app.PendingIntent.getActivity(
-                    context, reqCode,
-                    Intent(context, com.campusglass.widget.WidgetActionActivity::class.java)
-                        .putExtra("op", op).putExtra("wid", id),
-                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or
-                        android.app.PendingIntent.FLAG_IMMUTABLE,
-                )
-            rv.setOnClickPendingIntent(R.id.widget_next, widgetAction("next", id))
-            rv.setOnClickPendingIntent(R.id.widget_quote, widgetAction("quote", id + 1000))
-            rv.setOnClickPendingIntent(R.id.widget_root, widgetAction("open", id + 2000))
+            // 右上角箭头：今日 ⇄ 明日（广播方案）
+            val nextPi = android.app.PendingIntent.getBroadcast(
+                context, id,
+                Intent(context, TodayWidgetProvider::class.java).setAction(ACTION_NEXT).putExtra("wid", id),
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
+            )
+            rv.setOnClickPendingIntent(R.id.widget_next, nextPi)
+
+            // 诗句：点一下换一句
+            val quotePi = android.app.PendingIntent.getBroadcast(
+                context, id + 1000,
+                Intent(context, TodayWidgetProvider::class.java).setAction(ACTION_QUOTE),
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
+            )
+            rv.setOnClickPendingIntent(R.id.widget_quote, quotePi)
+
+            // 主体点击 → App 课表页
+            val pi = android.app.PendingIntent.getActivity(
+                context, id + 2000,
+                Intent(context, com.campusglass.MainActivity::class.java)
+                    .putExtra("openTab", "schedule")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
+            )
+            rv.setOnClickPendingIntent(R.id.widget_root, pi)
 
             mgr.updateAppWidget(id, rv)
         }
