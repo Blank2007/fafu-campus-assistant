@@ -56,7 +56,7 @@
         <!-- 桌面小部件：今日课表 -->
         <receiver
             android:name=".widget.TodayWidgetProvider"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="com.campusglass.WIDGET_NEXT" />

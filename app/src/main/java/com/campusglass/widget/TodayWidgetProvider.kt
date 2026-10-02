@@ -21,28 +21,26 @@ import java.time.LocalDate
 class TodayWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        when (intent.action) {
-            ACTION_NEXT -> {
-                val id = intent.getIntExtra("wid", -1)
-                if (id >= 0) {
-                    val prefs = context.getSharedPreferences("widget", Context.MODE_PRIVATE)
-                    prefs.edit().putInt("off_$id", if (prefs.getInt("off_$id", 0) == 0) 1 else 0).apply()
+        // 今/明切换与换一句：搭车系统标准动作 APPWIDGET_UPDATE（自定义动作部分系统会丢弃）
+        if (intent.getBooleanExtra("op_next", false)) {
+            val id = intent.getIntExtra("wid", -1)
+            if (id >= 0) {
+                val prefs = context.getSharedPreferences("widget", Context.MODE_PRIVATE)
+                prefs.edit().putInt("off_$id", if (prefs.getInt("off_$id", 0) == 0) 1 else 0).apply()
+            }
+            pushUpdate(context)
+            return
+        }
+        if (intent.getBooleanExtra("op_quote", false)) {
+            val pr = goAsync()
+            Thread {
+                runCatching {
+                    Hitokoto.fetchFresh(context)
                     pushUpdate(context)
-                    return
                 }
-            }
-            ACTION_QUOTE -> {
-                // 换一句：立即后台拉新句并重绘（避免拉到同一句）
-                val pr = goAsync()
-                Thread {
-                    runCatching {
-                        Hitokoto.fetchFresh(context)
-                        pushUpdate(context)
-                    }
-                    pr.finish()
-                }.start()
-                return
-            }
+                pr.finish()
+            }.start()
+            return
         }
         super.onReceive(context, intent)
         // 首次/每日：后台拉今日诗句后重绘（不阻塞主线程）
@@ -51,6 +49,10 @@ class TodayWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, mgr: AppWidgetManager, appWidgetIds: IntArray) {
         for (id in appWidgetIds) updateOne(context, mgr, id)
+        // 长按/系统强制刷新：同步刷新可滚动列表数据（v3.12 回归修复）
+        if (appWidgetIds.isNotEmpty()) {
+            mgr.notifyAppWidgetViewDataChanged(appWidgetIds, R.id.widget_list)
+        }
     }
 
     private fun refreshQuoteAsync(context: Context, force: Boolean) {
@@ -132,10 +134,13 @@ class TodayWidgetProvider : AppWidgetProvider() {
             )
             rv.setInt(R.id.widget_empty_text, "setTextColor", titleColor)
 
-            // 右上角箭头：今日 ⇄ 明日（广播方案）
+            // 右上角箭头：今日 ⇄ 明日（搭车标准 APPWIDGET_UPDATE，必达）
             val nextPi = android.app.PendingIntent.getBroadcast(
                 context, id,
-                Intent(context, TodayWidgetProvider::class.java).setAction(ACTION_NEXT).putExtra("wid", id),
+                Intent(context, TodayWidgetProvider::class.java)
+                    .setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE)
+                    .putExtra("op_next", true)
+                    .putExtra("wid", id),
                 android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
             )
             rv.setOnClickPendingIntent(R.id.widget_next, nextPi)
@@ -143,7 +148,10 @@ class TodayWidgetProvider : AppWidgetProvider() {
             // 诗句：点一下换一句
             val quotePi = android.app.PendingIntent.getBroadcast(
                 context, id + 1000,
-                Intent(context, TodayWidgetProvider::class.java).setAction(ACTION_QUOTE),
+                Intent(context, TodayWidgetProvider::class.java)
+                    .setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE)
+                    .putExtra("op_quote", true)
+                    .putExtra("wid", id),
                 android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
             )
             rv.setOnClickPendingIntent(R.id.widget_quote, quotePi)
