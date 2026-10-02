@@ -69,12 +69,15 @@ class TodayWidgetProvider : AppWidgetProvider() {
         private const val ACTION_NEXT = "com.campusglass.WIDGET_NEXT"
         private const val ACTION_QUOTE = "com.campusglass.WIDGET_QUOTE"
 
-        /** 课表/诗句变化后主动刷新所有小部件 */
+        /** 课表/诗句变化后主动刷新所有小部件（含列表数据） */
         fun pushUpdate(context: Context) {
             runCatching {
                 val mgr = AppWidgetManager.getInstance(context)
                 val ids = mgr.getAppWidgetIds(ComponentName(context, TodayWidgetProvider::class.java))
                 for (id in ids) updateOne(context, mgr, id)
+                if (ids.isNotEmpty()) {
+                    mgr.notifyAppWidgetViewDataChanged(ids, R.id.widget_list)   // 列表数据同步刷新
+                }
             }
         }
 
@@ -119,31 +122,15 @@ class TodayWidgetProvider : AppWidgetProvider() {
                 .filter { it.weekday == wd && week in it.weeks }
                 .sortedBy { it.startPeriod }
 
-            rv.removeAllViews(R.id.widget_rows)
-
-            if (courses.isEmpty()) {
-                // 无课：居中显示（区分今日/明日）
-                val empty = RemoteViews(context.packageName, R.layout.widget_empty_row)
-                empty.setTextViewText(
-                    R.id.empty_text,
-                    if (offset == 0) "今日无课" else "明日无课",
-                )
-                empty.setInt(R.id.empty_text, "setTextColor", titleColor)
-                rv.addView(R.id.widget_rows, empty)
-            } else {
-                for (c in courses.take(6)) {
-                    val row = RemoteViews(context.packageName, R.layout.widget_row)
-                    row.setInt(R.id.row_time, "setTextColor", timeColor)
-                    row.setInt(R.id.row_name, "setTextColor", titleColor)
-                    row.setInt(R.id.row_loc, "setTextColor", subColor)
-                    val start = runCatching { PeriodTable.startStr(context, c.startPeriod) }.getOrDefault("")
-                    val end = runCatching { PeriodTable.endStr(context, c.endPeriod) }.getOrDefault("")
-                    row.setTextViewText(R.id.row_time, "$start\n$end")   // 上/下课时间都标
-                    row.setTextViewText(R.id.row_name, c.name + "（第${c.startPeriod}-${c.endPeriod}节）")
-                    row.setTextViewText(R.id.row_loc, c.location.ifBlank { c.teacher }.ifBlank { " " })
-                    rv.addView(R.id.widget_rows, row)
-                }
-            }
+            // 可滚动课程列表（ListView 适配器）
+            val svcIntent = Intent(context, WidgetListService::class.java).putExtra("wid", id)
+            rv.setRemoteAdapter(R.id.widget_list, svcIntent)
+            rv.setEmptyView(R.id.widget_list, R.id.widget_empty_text)
+            rv.setTextViewText(
+                R.id.widget_empty_text,
+                if (offset == 0) "今日无课" else "明日无课",
+            )
+            rv.setInt(R.id.widget_empty_text, "setTextColor", titleColor)
 
             // 右上角箭头：今日 ⇄ 明日（广播方案）
             val nextPi = android.app.PendingIntent.getBroadcast(

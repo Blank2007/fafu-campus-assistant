@@ -48,6 +48,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- 小部件课程列表服务（可滚动） -->
+        <service
+            android:name=".widget.WidgetListService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
         <!-- 桌面小部件：今日课表 -->
         <receiver
             android:name=".widget.TodayWidgetProvider"
