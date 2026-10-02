@@ -1,4 +1,9 @@
 package com.campusglass.ui.home
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.style.TextAlign
 
 import android.content.Intent
 import android.net.Uri
@@ -34,6 +39,18 @@ private val schoolSites = listOf(
 @Composable
 fun HomeScreen(onGoto: (String) -> Unit) {
     val context = LocalContext.current
+
+    // 每日一句（一言）
+    var quote by remember {
+        mutableStateOf(com.campusglass.home.Hitokoto.cached(context))
+    }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (quote == null) {
+            quote = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.campusglass.home.Hitokoto.fetchToday(context)
+            }
+        }
+    }
 
     Column(Modifier.fillMaxSize()) {
         // 标题保留
@@ -82,6 +99,14 @@ fun HomeScreen(onGoto: (String) -> Unit) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                     )
+                    if (quote != null) {
+                        Text(
+                            "📜「${quote!!.text}」 —— ${quote!!.from}",
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        )
+                    }
                 }
             }
         }

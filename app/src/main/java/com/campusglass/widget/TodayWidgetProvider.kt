@@ -8,40 +8,60 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.widget.RemoteViews
 import com.campusglass.R
+import com.campusglass.home.Hitokoto
 import com.campusglass.schedule.PeriodTable
 import com.campusglass.schedule.ScheduleStore
 import java.time.LocalDate
 
 /**
- * 桌面小部件：课表（今日/明日切换）。
- * - 深/浅两套背景，跟随系统深色模式
- * - 右上角箭头：今日 ⇄ 明日
- * - 课表保存即时刷新 + 每 30 分钟自动刷新
+ * 桌面小部件：课表（今日/明日）+ 每日诗句。
+ * - 深/浅双背景跟随系统；无课时居中显示「今日无课」
+ * - 右上角箭头：今日 ⇄ 明日；底部诗句：点一下换一句
  */
 class TodayWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == ACTION_NEXT) {
-            val id = intent.getIntExtra("wid", -1)
-            if (id >= 0) {
-                val prefs = context.getSharedPreferences("widget", Context.MODE_PRIVATE)
-                prefs.edit().putInt("off_$id", if (prefs.getInt("off_$id", 0) == 0) 1 else 0).apply()
-                pushUpdate(context)
+        when (intent.action) {
+            ACTION_NEXT -> {
+                val id = intent.getIntExtra("wid", -1)
+                if (id >= 0) {
+                    val prefs = context.getSharedPreferences("widget", Context.MODE_PRIVATE)
+                    prefs.edit().putInt("off_$id", if (prefs.getInt("off_$id", 0) == 0) 1 else 0).apply()
+                    pushUpdate(context)
+                    return
+                }
+            }
+            ACTION_QUOTE -> {
+                refreshQuoteAsync(context, force = true)
                 return
             }
         }
         super.onReceive(context, intent)
+        // 首次/每日：后台拉今日诗句后重绘（不阻塞主线程）
+        refreshQuoteAsync(context, force = false)
     }
 
     override fun onUpdate(context: Context, mgr: AppWidgetManager, appWidgetIds: IntArray) {
         for (id in appWidgetIds) updateOne(context, mgr, id)
     }
 
+    private fun refreshQuoteAsync(context: Context, force: Boolean) {
+        val pr = goAsync()
+        Thread {
+            runCatching {
+                if (force) Hitokoto.fetchNew(context) else Hitokoto.fetchToday(context)
+                pushUpdate(context)
+            }
+            pr.finish()
+        }.start()
+    }
+
     companion object {
 
         private const val ACTION_NEXT = "com.campusglass.WIDGET_NEXT"
+        private const val ACTION_QUOTE = "com.campusglass.WIDGET_QUOTE"
 
-        /** 课表变化后主动刷新所有小部件 */
+        /** 课表/诗句变化后主动刷新所有小部件 */
         fun pushUpdate(context: Context) {
             runCatching {
                 val mgr = AppWidgetManager.getInstance(context)
@@ -55,7 +75,7 @@ class TodayWidgetProvider : AppWidgetProvider() {
             val prefs = context.getSharedPreferences("widget", Context.MODE_PRIVATE)
             val offset = prefs.getInt("off_$id", 0)          // 0=今日 1=明日
 
-            // 深/浅双背景（跟随系统深色模式）
+            // 深/浅双背景
             val night =
                 (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
                     Configuration.UI_MODE_NIGHT_YES
@@ -75,9 +95,17 @@ class TodayWidgetProvider : AppWidgetProvider() {
             rv.setInt(R.id.widget_title, "setTextColor", titleColor)
             rv.setInt(R.id.widget_date, "setTextColor", subColor)
             rv.setInt(R.id.widget_next, "setTextColor", titleColor)
+            rv.setInt(R.id.widget_quote, "setTextColor", subColor)
             rv.setTextViewText(R.id.widget_title, if (offset == 0) "📚 今日课表" else "📅 明日课表")
             rv.setTextViewText(R.id.widget_date, "第${week}周 · ${base.monthValue}/${base.dayOfMonth}")
             rv.setTextViewText(R.id.widget_next, if (offset == 0) "➡️" else "⬅️")
+
+            // 每日诗句（点击换一句）
+            val quote = Hitokoto.cached(context)
+            rv.setTextViewText(
+                R.id.widget_quote,
+                if (quote != null) "「${quote.text}」 —— ${quote.from}（点我换一句）" else "—",
+            )
 
             val courses = ScheduleStore.loadCourses(context)
                 .filter { it.weekday == wd && week in it.weeks }
@@ -86,13 +114,10 @@ class TodayWidgetProvider : AppWidgetProvider() {
             rv.removeAllViews(R.id.widget_rows)
 
             if (courses.isEmpty()) {
-                val row = RemoteViews(context.packageName, R.layout.widget_row)
-                row.setInt(R.id.row_name, "setTextColor", titleColor)
-                row.setInt(R.id.row_loc, "setTextColor", subColor)
-                row.setTextViewText(R.id.row_time, "")
-                row.setTextViewText(R.id.row_name, if (offset == 0) "今天没有课 🎉" else "明天没有课 🎉")
-                row.setTextViewText(R.id.row_loc, "点开 App 查看完整课表")
-                rv.addView(R.id.widget_rows, row)
+                // 无课：居中显示「今日无课」
+                val empty = RemoteViews(context.packageName, R.layout.widget_empty_row)
+                empty.setInt(R.id.empty_text, "setTextColor", titleColor)
+                rv.addView(R.id.widget_rows, empty)
             } else {
                 for (c in courses.take(6)) {
                     val row = RemoteViews(context.packageName, R.layout.widget_row)
@@ -108,24 +133,28 @@ class TodayWidgetProvider : AppWidgetProvider() {
             }
 
             // 右上角箭头：今日 ⇄ 明日
-            val nextIntent = Intent(context, TodayWidgetProvider::class.java)
-                .setAction(ACTION_NEXT)
-                .putExtra("wid", id)
             val nextPi = android.app.PendingIntent.getBroadcast(
-                context, id, nextIntent,
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT or
-                    android.app.PendingIntent.FLAG_IMMUTABLE,
+                context, id,
+                Intent(context, TodayWidgetProvider::class.java).setAction(ACTION_NEXT).putExtra("wid", id),
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
             )
             rv.setOnClickPendingIntent(R.id.widget_next, nextPi)
 
-            // 点击主体 → 直达 App 课表页
-            val openIntent = Intent(context, com.campusglass.MainActivity::class.java)
-                .putExtra("openTab", "schedule")
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            // 诗句：点一下换一句
+            val quotePi = android.app.PendingIntent.getBroadcast(
+                context, id + 1000,
+                Intent(context, TodayWidgetProvider::class.java).setAction(ACTION_QUOTE),
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
+            )
+            rv.setOnClickPendingIntent(R.id.widget_quote, quotePi)
+
+            // 主体点击 → App 课表页
             val pi = android.app.PendingIntent.getActivity(
-                context, 0, openIntent,
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT or
-                    android.app.PendingIntent.FLAG_IMMUTABLE,
+                context, 0,
+                Intent(context, com.campusglass.MainActivity::class.java)
+                    .putExtra("openTab", "schedule")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
             )
             rv.setOnClickPendingIntent(R.id.widget_root, pi)
 

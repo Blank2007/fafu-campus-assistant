@@ -47,7 +47,19 @@
     <LinearLayout
         android:id="@+id/widget_rows"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:layout_marginTop="6dp"
         android:orientation="vertical" />
+
+    <TextView
+        android:id="@+id/widget_quote"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:ellipsize="end"
+        android:gravity="end"
+        android:maxLines="2"
+        android:textColor="#B3FFFFFF"
+        android:textSize="9sp" />
 </LinearLayout>
