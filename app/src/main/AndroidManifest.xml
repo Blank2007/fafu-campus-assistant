@@ -29,6 +29,9 @@
         </intent>
     </queries>
 
+    <!-- 检查更新直接下载安装 APK -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
@@ -53,6 +56,24 @@
             android:name=".widget.WidgetListService"
             android:exported="false"
             android:permission="android.permission.BIND_REMOTEVIEWS" />
+        <!-- 安装包 FileProvider（直接下载安装） -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+        <!-- 更新安装完成后自动删除安装包 -->
+        <receiver
+            android:name=".UpdateCleanupReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <!-- 桌面小部件：今日课表 -->
         <receiver
             android:name=".widget.TodayWidgetProvider"

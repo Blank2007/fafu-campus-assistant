@@ -90,6 +90,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
+    "v3.15.zilyf · 2026-10-04 00:05" to "物流结果抬头显示运单号+轨迹条数；检查更新支持直接下载安装（带进度、装完自动删包）与浏览器下载二选一",
     "v3.14.zilyf · 2026-10-03 23:45" to "修复重复查询失败（快递接口 WAF 限流）：90 秒结果缓存 + 403 自动重试 + 请求限速；限流提示更明确",
     "v3.13.zilyf · 2026-10-03 01:40" to "修复长按强制刷新失效（v3.12 回归）；今/明切换与换一句搭车系统标准动作（部分系统丢弃自定义广播的根治，仍非透明 Activity）",
     "v3.12.zilyf · 2026-10-03 01:25" to "小部件课程列表改可滚动 ListView（课程多不再显示不全）；周次日期与标题同行",
@@ -137,6 +138,9 @@ fun SettingsScreen() {
     var showColorPicker by remember { mutableStateOf(false) }
     var updateInfo by remember { mutableStateOf<String?>(null) }
     var checking by remember { mutableStateOf(false) }
+    var newTag by remember { mutableStateOf<String?>(null) }
+    var dlInfo by remember { mutableStateOf("") }
+    var downloading by remember { mutableStateOf(false) }
 
     val pickBgImage = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -369,21 +373,115 @@ fun SettingsScreen() {
                         onClick = {
                             checking = true
                             scope.launch {
-                                val msg = withContext(Dispatchers.IO) { checkUpdate() }
-                                updateInfo = msg
+                                val r = withContext(Dispatchers.IO) { checkUpdate() }
+                                updateInfo = r.message
+                                newTag = r.newTag
                                 checking = false
                             }
                         },
                         enabled = !checking,
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text(if (checking) "正在检查更新…" else "🔄 检查更新") }
-                    TextButton(onClick = {
-                        runCatching {
-                            context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Blank2007/fafu-campus-assistant/releases"))
+                    // 更新方式二选一：直接下载安装 / 浏览器下载
+                    val tag = newTag
+                    if (tag != null) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    downloading = true
+                                    dlInfo = "正在下载 v$tag…"
+                                    scope.launch {
+                                        val apk = withContext(Dispatchers.IO) {
+                                            runCatching {
+                                                val dir = java.io.File(
+                                                    context.getExternalFilesDir(null), "updates"
+                                                ).apply { mkdirs() }
+                                                val file = java.io.File(dir, "FAFU-Campus-Assistant-v$tag.apk")
+                                                val conn = java.net.URL(
+                                                    "https://github.com/Blank2007/fafu-campus-assistant/releases/" +
+                                                        "download/v$tag/FAFU-Campus-Assistant-v$tag.apk"
+                                                ).openConnection() as java.net.HttpURLConnection
+                                                conn.connectTimeout = 15_000
+                                                conn.readTimeout = 60_000
+                                                val total = conn.contentLengthLong
+                                                conn.inputStream.use { input ->
+                                                    file.outputStream().use { out ->
+                                                        val buf = ByteArray(64 * 1024)
+                                                        var done = 0L
+                                                        while (true) {
+                                                            val n = input.read(buf)
+                                                            if (n <= 0) break
+                                                            out.write(buf, 0, n)
+                                                            done += n
+                                                            if (total > 0) {
+                                                                dlInfo = "正在下载 v$tag… ${(done * 100 / total).toInt()}%"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                conn.disconnect()
+                                                file
+                                            }.getOrNull()
+                                        }
+                                        downloading = false
+                                        if (apk == null) {
+                                            dlInfo = "下载失败，可点「浏览器下载」试试"
+                                        } else {
+                                            dlInfo = "已下载完成，调起安装（安装完成后自动删除安装包）"
+                                            val uri = androidx.core.content.FileProvider.getUriForFile(
+                                                context, context.packageName + ".fileprovider", apk,
+                                            )
+                                            val it = Intent(Intent.ACTION_VIEW).apply {
+                                                setDataAndType(
+                                                    uri, "application/vnd.android.package-archive"
+                                                )
+                                                addFlags(
+                                                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                                        Intent.FLAG_ACTIVITY_NEW_TASK
+                                                )
+                                            }
+                                            runCatching { context.startActivity(it) }.onFailure {
+                                                dlInfo = "无法调起安装：请在系统设置允许本应用安装应用后重试，或点「浏览器下载」"
+                                            }
+                                        }
+                                    }
+                                },
+                                enabled = !downloading,
+                                modifier = Modifier.weight(1f),
+                            ) { Text(if (downloading) "下载中…" else "⬇️ 直接下载安装") }
+                            OutlinedButton(
+                                onClick = {
+                                    runCatching {
+                                        context.startActivity(
+                                            Intent(
+                                                Intent.ACTION_VIEW,
+                                                Uri.parse("https://github.com/Blank2007/fafu-campus-assistant/releases"),
+                                            )
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) { Text("🌐 浏览器下载") }
+                        }
+                        if (dlInfo.isNotBlank()) {
+                            Text(
+                                dlInfo,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                             )
                         }
-                    }) { Text("打开下载页（GitHub Releases）") }
+                    } else {
+                        TextButton(onClick = {
+                            runCatching {
+                                context.startActivity(
+                                    Intent(
+                                        Intent.ACTION_VIEW,
+                                        Uri.parse("https://github.com/Blank2007/fafu-campus-assistant/releases"),
+                                    )
+                                )
+                            }
+                        }) { Text("🌐 浏览器下载（GitHub Releases）") }
+                    }
                 }
             }
         }
@@ -673,8 +771,11 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
     )
 }
 
+/** 检查更新结果 */
+private data class UpdateCheck(val message: String, val newTag: String?)
+
 /** 检查更新：读 GitHub Releases 最新版（带 User-Agent + 重试；GitHub API 强制要求 UA） */
-private fun checkUpdate(): String {
+private fun checkUpdate(): UpdateCheck {
     val url = "https://api.github.com/repos/Blank2007/fafu-campus-assistant/releases/latest"
     var lastErr = ""
     repeat(2) {
@@ -708,12 +809,15 @@ private fun checkUpdate(): String {
                 if (acc != 0) acc else (a.getOrElse(i) { 0 } - b.getOrElse(i) { 0 })
             }
             return when {
-                latest.isBlank() -> "没获取到版本信息，请稍后再试"
-                cmp <= 0 -> "已是最新版本（v$current）✅"
-                else -> "发现新版本 v$latest（当前 v$current）！点「去下载」更新" +
-                    if (body.isNotBlank()) "\n\n📋 更新日志：\n" + body.take(800) else ""
+                latest.isBlank() -> UpdateCheck("没获取到版本信息，请稍后再试", null)
+                cmp <= 0 -> UpdateCheck("已是最新版本（v$current）✅", null)
+                else -> UpdateCheck(
+                    "发现新版本 v$latest（当前 v$current）！选一种方式更新" +
+                        if (body.isNotBlank()) "\n\n📋 更新日志：\n" + body.take(800) else "",
+                    latest,
+                )
             }
         }.onFailure { lastErr = it.message ?: "网络异常" }
     }
-    return "检查失败：$lastErr（可能是网络不畅，可直接点「打开下载页」查看）"
+    return UpdateCheck("检查失败：$lastErr（可能是网络不畅，可直接点「浏览器下载」查看）", null)
 }

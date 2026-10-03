@@ -236,6 +236,11 @@ fun PickupScreen() {
                                 fontWeight = FontWeight.Bold,
                             )
                         }
+                        Text(
+                            "运单号：$resultNo　·　共 ${r.traces.size} 条轨迹（全部显示）",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        )
                         if (r.traces.isEmpty()) {
                             Text(r.message, style = MaterialTheme.typography.bodySmall)
                         } else {
