@@ -169,7 +169,7 @@ fun HomeScreen(onGoto: (String) -> Unit) {
                             )
                         } else {
                             Text(
-                                "（联网后自动加载）",
+                                "获取失败，稍后再试（点卡片可重试）",
                                 Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.Center,
                                 style = MaterialTheme.typography.bodySmall,

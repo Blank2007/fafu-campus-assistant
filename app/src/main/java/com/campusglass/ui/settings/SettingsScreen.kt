@@ -90,6 +90,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
+    "v3.17.zilyf · 2026-10-04 00:40" to "检查更新改为弹窗内检查+下载一体化（日志/进度/安装/浏览器二选一）；诗词获取失败显示旧句或明确提示",
     "v3.16.zilyf · 2026-10-04 00:30" to "快递查询模块重写（同一单号多结果根治：单号+公司交叉校验、确定性候选、3 分钟缓存）；全库死代码清理",
     "v3.15.zilyf · 2026-10-04 00:05" to "物流结果抬头显示运单号+轨迹条数；检查更新支持直接下载安装（带进度、装完自动删包）与浏览器下载二选一",
     "v3.14.zilyf · 2026-10-03 23:45" to "修复重复查询失败（快递接口 WAF 限流）：90 秒结果缓存 + 403 自动重试 + 请求限速；限流提示更明确",
@@ -137,11 +138,7 @@ fun SettingsScreen() {
     var expanded by remember { mutableStateOf(false) }
     var showTimeDialog by remember { mutableStateOf(false) }
     var showColorPicker by remember { mutableStateOf(false) }
-    var updateInfo by remember { mutableStateOf<String?>(null) }
-    var checking by remember { mutableStateOf(false) }
-    var newTag by remember { mutableStateOf<String?>(null) }
-    var dlInfo by remember { mutableStateOf("") }
-    var downloading by remember { mutableStateOf(false) }
+    var showUpdate by remember { mutableStateOf(false) }
 
     val pickBgImage = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -370,119 +367,13 @@ fun SettingsScreen() {
                             "需求设计、提示词与测试反馈由 Void_Blank 提供。人出想法，AI 写代码。",
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    Button(
-                        onClick = {
-                            checking = true
-                            scope.launch {
-                                val r = withContext(Dispatchers.IO) { checkUpdate() }
-                                updateInfo = r.message
-                                newTag = r.newTag
-                                checking = false
-                            }
-                        },
-                        enabled = !checking,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text(if (checking) "正在检查更新…" else "🔄 检查更新") }
-                    // 更新方式二选一：直接下载安装 / 浏览器下载
-                    val tag = newTag
-                    if (tag != null) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = {
-                                    downloading = true
-                                    dlInfo = "正在下载 v$tag…"
-                                    scope.launch {
-                                        val apk = withContext(Dispatchers.IO) {
-                                            runCatching {
-                                                val dir = java.io.File(
-                                                    context.getExternalFilesDir(null), "updates"
-                                                ).apply { mkdirs() }
-                                                val file = java.io.File(dir, "FAFU-Campus-Assistant-v$tag.apk")
-                                                val conn = java.net.URL(
-                                                    "https://github.com/Blank2007/fafu-campus-assistant/releases/" +
-                                                        "download/v$tag/FAFU-Campus-Assistant-v$tag.apk"
-                                                ).openConnection() as java.net.HttpURLConnection
-                                                conn.connectTimeout = 15_000
-                                                conn.readTimeout = 60_000
-                                                val total = conn.contentLengthLong
-                                                conn.inputStream.use { input ->
-                                                    file.outputStream().use { out ->
-                                                        val buf = ByteArray(64 * 1024)
-                                                        var done = 0L
-                                                        while (true) {
-                                                            val n = input.read(buf)
-                                                            if (n <= 0) break
-                                                            out.write(buf, 0, n)
-                                                            done += n
-                                                            if (total > 0) {
-                                                                dlInfo = "正在下载 v$tag… ${(done * 100 / total).toInt()}%"
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                conn.disconnect()
-                                                file
-                                            }.getOrNull()
-                                        }
-                                        downloading = false
-                                        if (apk == null) {
-                                            dlInfo = "下载失败，可点「浏览器下载」试试"
-                                        } else {
-                                            dlInfo = "已下载完成，调起安装（安装完成后自动删除安装包）"
-                                            val uri = androidx.core.content.FileProvider.getUriForFile(
-                                                context, context.packageName + ".fileprovider", apk,
-                                            )
-                                            val it = Intent(Intent.ACTION_VIEW).apply {
-                                                setDataAndType(
-                                                    uri, "application/vnd.android.package-archive"
-                                                )
-                                                addFlags(
-                                                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                                                        Intent.FLAG_ACTIVITY_NEW_TASK
-                                                )
-                                            }
-                                            runCatching { context.startActivity(it) }.onFailure {
-                                                dlInfo = "无法调起安装：请在系统设置允许本应用安装应用后重试，或点「浏览器下载」"
-                                            }
-                                        }
-                                    }
-                                },
-                                enabled = !downloading,
-                                modifier = Modifier.weight(1f),
-                            ) { Text(if (downloading) "下载中…" else "⬇️ 直接下载安装") }
-                            OutlinedButton(
-                                onClick = {
-                                    runCatching {
-                                        context.startActivity(
-                                            Intent(
-                                                Intent.ACTION_VIEW,
-                                                Uri.parse("https://github.com/Blank2007/fafu-campus-assistant/releases"),
-                                            )
-                                        )
-                                    }
-                                },
-                                modifier = Modifier.weight(1f),
-                            ) { Text("🌐 浏览器下载") }
-                        }
-                        if (dlInfo.isNotBlank()) {
-                            Text(
-                                dlInfo,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                            )
-                        }
-                    } else {
-                        TextButton(onClick = {
-                            runCatching {
-                                context.startActivity(
-                                    Intent(
-                                        Intent.ACTION_VIEW,
-                                        Uri.parse("https://github.com/Blank2007/fafu-campus-assistant/releases"),
-                                    )
-                                )
-                            }
-                        }) { Text("🌐 浏览器下载（GitHub Releases）") }
+                    if (showUpdate) {
+                        UpdateDialog(onDismiss = { showUpdate = false })
                     }
+                    Button(
+                        onClick = { showUpdate = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("🔄 检查更新 · 下载更新") }
                 }
             }
         }
@@ -560,25 +451,6 @@ fun SettingsScreen() {
     }
     if (showColorPicker) {
         ColorPickerDialog(onDismiss = { showColorPicker = false })
-    }
-    updateInfo?.let { msg ->
-        AlertDialog(
-            onDismissRequest = { updateInfo = null },
-            title = { Text("检查更新") },
-            text = { Text(msg) },
-            confirmButton = {
-                TextButton(onClick = {
-                    runCatching {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Blank2007/fafu-campus-assistant/releases"))
-                        )
-                    }
-                }) { Text("去下载") }
-            },
-            dismissButton = {
-                TextButton(onClick = { updateInfo = null }) { Text("关闭") }
-            },
-        )
     }
 }
 
@@ -821,4 +693,142 @@ private fun checkUpdate(): UpdateCheck {
         }.onFailure { lastErr = it.message ?: "网络异常" }
     }
     return UpdateCheck("检查失败：$lastErr（可能是网络不畅，可直接点「浏览器下载」查看）", null)
+}
+
+
+/** 检查更新弹窗：检查 + 更新日志 + App 内下载安装（进度）/ 浏览器下载 */
+@Composable
+private fun UpdateDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var checking by remember { mutableStateOf(true) }
+    var info by remember { mutableStateOf<String?>(null) }
+    var newTag by remember { mutableStateOf<String?>(null) }
+    var dlInfo by remember { mutableStateOf("") }
+    var downloading by remember { mutableStateOf(false) }
+
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        val r = withContext(Dispatchers.IO) { checkUpdate() }
+        info = r.message
+        newTag = r.newTag
+        checking = false
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!downloading) onDismiss() },
+        title = { Text("🔄 检查更新") },
+        text = {
+            Column(
+                Modifier
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (checking) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            Modifier.size(20.dp), strokeWidth = 2.dp,
+                        )
+                        Text("正在检查更新…", style = MaterialTheme.typography.bodySmall)
+                    }
+                } else {
+                    Text(info ?: "", style = MaterialTheme.typography.bodySmall)
+                    if (dlInfo.isNotBlank()) {
+                        Text(
+                            dlInfo,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            val tag = newTag
+            if (!checking && tag != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Button(
+                        onClick = {
+                            downloading = true
+                            dlInfo = "正在下载 v$tag…"
+                            scope.launch {
+                                val apk = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        val dir = java.io.File(
+                                            context.getExternalFilesDir(null), "updates"
+                                        ).apply { mkdirs() }
+                                        val file = java.io.File(dir, "FAFU-Campus-Assistant-v$tag.apk")
+                                        val conn = java.net.URL(
+                                            "https://github.com/Blank2007/fafu-campus-assistant/releases/" +
+                                                "download/v$tag/FAFU-Campus-Assistant-v$tag.apk"
+                                        ).openConnection() as java.net.HttpURLConnection
+                                        conn.connectTimeout = 15_000
+                                        conn.readTimeout = 60_000
+                                        val total = conn.contentLengthLong
+                                        conn.inputStream.use { input ->
+                                            file.outputStream().use { out ->
+                                                val buf = ByteArray(64 * 1024)
+                                                var done = 0L
+                                                while (true) {
+                                                    val n = input.read(buf)
+                                                    if (n <= 0) break
+                                                    out.write(buf, 0, n)
+                                                    done += n
+                                                    if (total > 0) {
+                                                        dlInfo = "正在下载 v$tag… ${(done * 100 / total).toInt()}%"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        conn.disconnect()
+                                        file
+                                    }.getOrNull()
+                                }
+                                downloading = false
+                                if (apk == null) {
+                                    dlInfo = "下载失败，可点「浏览器下载」试试"
+                                } else {
+                                    dlInfo = "下载完成，调起安装（安装后自动删除安装包）"
+                                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                                        context, context.packageName + ".fileprovider", apk,
+                                    )
+                                    val it = Intent(Intent.ACTION_VIEW).apply {
+                                        setDataAndType(uri, "application/vnd.android.package-archive")
+                                        addFlags(
+                                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                                Intent.FLAG_ACTIVITY_NEW_TASK
+                                        )
+                                    }
+                                    runCatching { context.startActivity(it) }.onFailure {
+                                        dlInfo = "无法调起安装：请在系统设置允许本应用安装应用，或点「浏览器下载」"
+                                    }
+                                }
+                            }
+                        },
+                        enabled = !downloading,
+                    ) { Text(if (downloading) "下载中…" else "⬇️ 直接下载安装") }
+                    OutlinedButton(
+                        onClick = {
+                            runCatching {
+                                context.startActivity(
+                                    Intent(
+                                        Intent.ACTION_VIEW,
+                                        Uri.parse("https://github.com/Blank2007/fafu-campus-assistant/releases"),
+                                    )
+                                )
+                            }
+                        },
+                    ) { Text("🌐 浏览器下载") }
+                }
+            } else if (!checking) {
+                TextButton(onClick = onDismiss) { Text("关闭") }
+            }
+        },
+        dismissButton = {
+            if (!downloading) TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
 }
