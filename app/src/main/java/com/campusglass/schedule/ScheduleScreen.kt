@@ -87,7 +87,6 @@ fun ScheduleScreen() {
     var detail by remember { mutableStateOf<Course?>(null) }
     var editTarget by remember { mutableStateOf<Course?>(null) }
     var pendingDeleteAll by remember { mutableStateOf<Course?>(null) }   // SC-6
-    var importCandidate by remember { mutableStateOf<Pair<String, List<Course>>?>(null) }   // （保留兼容）
     var showImport by remember { mutableStateOf(false) }
     var importText by remember { mutableStateOf("") }
     var importError by remember { mutableStateOf("") }

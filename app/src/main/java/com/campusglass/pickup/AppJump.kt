@@ -1,147 +1,38 @@
 package com.campusglass.pickup
 
 import android.content.Context
-import android.content.pm.PackageManager
-import android.net.Uri
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 
 /**
- * 拼多多 / 支付宝·菜鸟 取件码快捷跳转。
- *
- * 设计目标：不是手输取件码，而是一键拉起“能看取件码”的页面。
- *
- * 来源（公开逆向资料 / 社区实测，详见“关于”页）：
- *  - 拼多多取件看【身份码】（多多驿站扫码出库用，K 开头取件码配合身份码亮码），
- *    入口：个人中心→多多买菜→自提服务→我的身份码；驿站现场可扫墙上二维码直达身份码页。
- *    scheme：pinduoduo://com.xunmeng.pinduoduo/scan.html（扫一扫）、index.html?...（个人中心）
- *  - 支付宝·菜鸟小程序：alipays://platformapi/startapp?appId=2021001141626787（打开即取件码，
- *    V2EX 讨论实测可用；按需求不拉起菜鸟 App，走支付宝）
+ * 拼多多 / 支付宝·菜鸟 取件快捷跳转（精简版：仅保留实际使用的链路）。
  */
 object AppJump {
 
     const val PDD_PKG = "com.xunmeng.pinduoduo"
     const val ALIPAY_PKG = "com.eg.android.AlipayGphone"
 
-    /** 拼多多 · 扫一扫（扫驿站二维码 → 直达身份码/亮码流程，php.cn 实测路径） */
-    const val PDD_SCAN = "pinduoduo://com.xunmeng.pinduoduo/scan.html"
     /** 拼多多 · 个人中心（多多买菜 → 自提服务 → 我的身份码） */
-    const val PDD_PERSONAL = "pinduoduo://com.xunmeng.pinduoduo/index.html?index=4&pr_tab_link=personal.html"
-    const val PDD_HOME = "pinduoduo://open.homepage"
+    private const val PDD_PERSONAL =
+        "pinduoduo://com.xunmeng.pinduoduo/index.html?index=4&pr_tab_link=personal.html"
+    private const val PDD_HOME = "pinduoduo://open.homepage"
 
-    /** 支付宝 · 菜鸟小程序（打开即取件码） */
-    const val ALIPAY_CAINIAO = "alipays://platformapi/startapp?appId=2021001141626787"
-
-    fun isInstalled(context: Context, pkg: String): Boolean = try {
-        context.packageManager.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0))
-        true
-    } catch (_: Exception) {
-        false
-    }
-
-    /** 拼多多 · 扫一扫直达身份码流程（驿站现场扫墙上二维码最短路径） */
-    fun openPddScan(context: Context) = jumpChain(
-        context,
-        listOf(PDD_SCAN, PDD_PERSONAL, PDD_HOME),
-        PDD_PKG,
-    )
-
-    /** 拼多多 · 个人中心（进“多多买菜→自提服务→我的身份码”） */
-    fun openPddPersonal(context: Context) = jumpChain(
-        context,
-        listOf(PDD_PERSONAL, PDD_HOME),
-        PDD_PKG,
-    )
+    /** 拼多多 · 个人中心 */
+    fun openPddPersonal(context: Context) = jumpChain(context, listOf(PDD_PERSONAL, PDD_HOME), PDD_PKG)
 
     /** 拼多多 · 首页 */
     fun openPddHome(context: Context) = jumpChain(context, listOf("pinduoduo://", PDD_HOME), PDD_PKG)
 
-    const val WECHAT_PKG = "com.tencent.mm"
-
-    /**
-     * 拼多多驿站在微信里的身份码/包裹页入口（用户提供，含其驿站点 A082507556）。
-     * 微信 OAuth 链接需在微信内打开：复制链接 + 自动拉起微信，用户粘贴到
-     * 「文件传输助手」点击即可直达身份码/包裹页。
-     */
-    const val PDD_WECHAT_PACKAGE_URL =
-        "https://open.weixin.qq.com/connect/oauth2/authorize?appid=wx913449bbda3b9f9a" +
-            "&redirect_uri=https://mdkd.pinduoduo.com/weixin/login?redirect_url=/weixin/package" +
-            "&station_code=A082507556&response_type=code&scope=snsapi_base" +
-            "&state=false&connect_redirect=1#wechat_redirect"
-
-    fun openPddWeChatPackage(context: Context) {
-        // 复制链接到剪贴板
+    /** 保底：直接打开 App 首页（跳转失败时用） */
+    fun openAppFallback(context: Context, pkg: String) {
         runCatching {
-            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            cm.setPrimaryClip(android.content.ClipData.newPlainText("拼多多身份码链接", PDD_WECHAT_PACKAGE_URL))
-        }
-        // 拉起微信
-        val launched = runCatching {
-            val launch = context.packageManager.getLaunchIntentForPackage(WECHAT_PKG)
+            val launch = context.packageManager.getLaunchIntentForPackage(pkg)
             if (launch != null) {
                 context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                true
-            } else false
-        }.getOrDefault(false)
-        if (launched) {
-            android.widget.Toast.makeText(
-                context,
-                "链接已复制：在微信里发给「文件传输助手」并点击，直达身份码",
-                android.widget.Toast.LENGTH_LONG,
-            ).show()
-        } else {
-            // 没装微信 → 浏览器试开
-            runCatching {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(PDD_WECHAT_PACKAGE_URL))
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-            }
-        }
-    }
-
-    /** 浏览器直接试开（部分环境不走微信也能进） */
-    fun openPddWeChatInBrowser(context: Context) =
-        jumpChain(context, listOf(PDD_WECHAT_PACKAGE_URL), PDD_PKG)
-
-    /** 直接跳指定 URI（嗅探出的真实路由用） */
-    fun openUri(context: Context, uri: String, pkg: String) = jumpChain(context, listOf(uri), pkg)
-
-    /** 支付宝 · 菜鸟取件码（失败回退：支付宝首页 → 应用市场） */
-    fun openAlipayCainiao(context: Context) = jumpChain(
-        context,
-        listOf(ALIPAY_CAINIAO, "alipays://platformapi/startapp?appId=20000067"),
-        ALIPAY_PKG,
-    )
-
-    private fun jumpChain(context: Context, uris: List<String>, pkg: String) {
-        for (uri in uris) {
-            // 1) 指定包名的 ACTION_VIEW（最精准）
-            runCatching {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(uri))
-                        .setPackage(pkg)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-                return
-            }
-            // 2) 不限包名（部分 ROM 对 scheme 解析更宽松）
-            runCatching {
-                context.startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse(uri))
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
                 return
             }
         }
-        // 3) 按包名拉起首页
-        runCatching {
-            context.packageManager.getLaunchIntentForPackage(pkg)?.let {
-                context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                return
-            }
-        }
-        // 4) 应用市场兜底
         runCatching {
             context.startActivity(
                 Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg"))
@@ -150,5 +41,26 @@ object AppJump {
         }.onFailure {
             Toast.makeText(context, "未安装该应用，且无法打开应用市场", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun jumpChain(context: Context, uris: List<String>, pkg: String) {
+        for (uri in uris) {
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+                        .setPackage(pkg)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+                return
+            }
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+                return
+            }
+        }
+        openAppFallback(context, pkg)
     }
 }

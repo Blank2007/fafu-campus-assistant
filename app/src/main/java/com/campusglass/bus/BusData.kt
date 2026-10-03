@@ -16,7 +16,6 @@ data class BusRoute(
     val intervalNote: String,
     val timeOfficial: Boolean,      // true=官方/实测时刻；false=按间隔推算
     val destTags: List<String>,     // 目的地筛选
-    val mapKeyword: String = "",
     val note: String = "",
     val peakFrom: String? = null,
     val peakTo: String? = null,
@@ -47,7 +46,6 @@ object BusData {
             intervalNote = "早高峰 7:45-8:00 每 10 分钟一班（官方）；其余约 15 分钟（推算）",
             timeOfficial = true,
             destTags = listOf("万达广场"),
-            mapKeyword = "建阳103路公交",
             note = "单程 7.5 公里约 15 分钟，直达商圈（新岭总站发出首班 7:45，2026-08 核实）",
             peakFrom = "7:45", peakTo = "8:00", peakIntervalMin = 10,
             offPeakIntervalMin = 15,
@@ -69,7 +67,6 @@ object BusData {
             intervalNote = "早高峰 7:30-8:00 每 10 分钟一班（官方）；平峰约 20 分钟（推算）",
             timeOfficial = true,
             destTags = emptyList(),
-            mapKeyword = "建阳105路公交",
             note = "25 分钟跑完 14 公里；2026-08 走向经 童游大街北/巨电新能源/碧全月亮湾/海林大厦/南平移动公司/芦上/宝鼎路",
             peakFrom = "7:30", peakTo = "8:00", peakIntervalMin = 10,
             offPeakIntervalMin = 20,
@@ -95,7 +92,6 @@ object BusData {
             intervalNote = "约 20 分钟一班（推算）",
             timeOfficial = true,
             destTags = listOf("建发悦城"),
-            mapKeyword = "建阳107路公交",
             note = "首班 7:15（2026-09 核实，非 6:50）；去建发悦城坐到「童游农贸（烟草公司）」换乘建阳1路",
             offPeakIntervalMin = 20,
             upStops = listOf(
@@ -134,7 +130,6 @@ object BusData {
             intervalNote = "发车间隔约 23-90 分钟/趟（官方区间），波动较大",
             timeOfficial = false,
             destTags = listOf("动车站"),
-            mapKeyword = "建阳K2路公交",
             note = "全程 25 站：西区公交站→教师进修学院→二院→宝山路口→汽车站→总工会→市立医院→鹏宇佳苑→安居楼→社区卫生中心→和顺景园→供电局→火车站→万晟星城→万晟皇庭→周家→赤岸→兴华啤酒→创业园三期→海源新材料→福建农林大学南平校区→新安路→贵口→芹口(将口收费站)→高铁南平市站",
         ),
         BusRoute(
@@ -146,7 +141,6 @@ object BusData {
             intervalNote = "约 15-19 分钟一班（推算）",
             timeOfficial = false,
             destTags = listOf("建发悦城", "万达广场"),
-            mapKeyword = "建阳1路公交",
             note = "换乘点：童游农贸（烟草公司）/ 滨江壹号。途经：建发悦城—人民公园西门—童游农贸—…—滨江壹号—万达广场—…—闽北卫校",
             offPeakIntervalMin = 15,
         ),
@@ -159,7 +153,6 @@ object BusData {
             intervalNote = "快速通道线 7:00-20:00 / 8:20-22:45；303省道线 7:20-19:30 / 8:45-22:00",
             timeOfficial = true,
             destTags = listOf("动车站"),
-            mapKeyword = "南平K1路公交",
             note = "不在校区设站，武夷山方向接驳参考；去动车站首选 K2 路",
         ),
     )

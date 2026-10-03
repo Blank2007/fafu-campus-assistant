@@ -180,15 +180,6 @@ object ScheduleShare {
         }.getOrNull()
     }
 }
-    fun periodOfTime(c: Context, t: LocalTime): Int {
-        val times = all(c).mapNotNull {
-            runCatching {
-                LocalTime.parse(it.substringBefore("-")) to LocalTime.parse(it.substringAfter("-"))
-            }.getOrNull()
-        }
-        return times.indexOfFirst { !it.first.isAfter(t) && !it.second.isBefore(t) }
-            .let { if (it >= 0) it + 1 else 1 }
-    }
 }
 
 /** 课表本地存储（周从【周日】起算） */

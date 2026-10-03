@@ -68,8 +68,6 @@ class TodayWidgetProvider : AppWidgetProvider() {
 
     companion object {
 
-        private const val ACTION_NEXT = "com.campusglass.WIDGET_NEXT"
-        private const val ACTION_QUOTE = "com.campusglass.WIDGET_QUOTE"
 
         /** 课表/诗句变化后主动刷新所有小部件（含列表数据） */
         fun pushUpdate(context: Context) {

@@ -109,7 +109,7 @@ fun PickupScreen() {
                                     ).setPackage(AppJump.ALIPAY_PKG).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                 )
                             }.onFailure {
-                                PddLauncher.openApp(context, AppJump.ALIPAY_PKG)
+                                AppJump.openAppFallback(context, AppJump.ALIPAY_PKG)
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
