@@ -56,9 +56,23 @@ object ExpressApi {
         }
     }
 
+    /** 单号结果缓存（90 秒）：重复查询同一单号不打接口，避免 WAF 限流（SEC-2/EX-3） */
+    private val cache = object : LinkedHashMap<String, Pair<Long, Result>>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<Long, Result>>?) = size > 20
+    }
+    private const val CACHE_TTL_MS = 90_000L
+
     fun query(rawNu: String): Result {
         val nu = normalize(rawNu)
         if (nu.isBlank()) return Result(false, "未知", "", emptyList(), "请先输入快递单号")
+
+        // 命中缓存：直接返回（重复查询不再触发限流）
+        synchronized(cache) {
+            val hit = cache[nu]
+            if (hit != null && System.currentTimeMillis() - hit.first < CACHE_TTL_MS) {
+                return hit.second
+            }
+        }
 
         return runCatching {
             // ---- 1) 候选公司列表 ----
@@ -93,9 +107,10 @@ object ExpressApi {
                 return Result(false, "未知", "", emptyList(), "没识别出快递公司，请核对单号")
             }
 
-            // ---- 2) 逐个候选试查 ----
+            // ---- 2) 逐个候选试查（请求间限速，避免 WAF 误伤） ----
             var networkFailures = 0
-            for (com in candidates) {
+            for ((idx, com) in candidates.withIndex()) {
+                if (idx > 0) runCatching { Thread.sleep(350) }
                 val q = runCatching {
                     get(
                         "https://www.kuaidi100.com/query?type=${com.code}&postid=$encoded" +
@@ -125,7 +140,9 @@ object ExpressApi {
                 val stateCode = json.optString("state", "")
                 val stateText = stateTextOf(stateCode, traces)
                 val comName = json.optString("com").ifBlank { com.name }.ifBlank { com.code }
-                return Result(true, comName, stateText, traces, "ok")
+                val res = Result(true, comName, stateText, traces, "ok")
+                synchronized(cache) { cache[nu] = System.currentTimeMillis() to res }   // 写缓存
+                return res
             }
 
             if (networkFailures > 0 && networkFailures == candidates.size) {
@@ -172,22 +189,30 @@ object ExpressApi {
         }
     }
 
-    /** EX-3：非 2xx 一律报错（而不是吞掉说"查不到"） */
+    /** EX-3：非 2xx 报错；403/5xx 等 1.2s 自动重试一次（WAF 限流常见于连发） */
     private fun get(url: String): String {
-        val conn = URL(url).openConnection() as HttpURLConnection
-        conn.connectTimeout = 10_000
-        conn.readTimeout = 10_000
-        conn.setRequestProperty("User-Agent", UA)
-        conn.setRequestProperty("Referer", "https://www.kuaidi100.com/")
-        val code = conn.responseCode
-        if (code !in 200..299) {
-            conn.disconnect()
-            throw IOException("HTTP $code")
+        fun once(): String {
+            val conn = URL(url).openConnection() as HttpURLConnection
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 10_000
+            conn.setRequestProperty("User-Agent", UA)
+            conn.setRequestProperty("Referer", "https://www.kuaidi100.com/")
+            val code = conn.responseCode
+            if (code !in 200..299) {
+                conn.disconnect()
+                throw IOException(if (code == 403) "HTTP 403（查询过于频繁，稍等几秒再试）" else "HTTP $code")
+            }
+            return try {
+                conn.inputStream.bufferedReader().use { it.readText() }
+            } finally {
+                conn.disconnect()
+            }
         }
         return try {
-            conn.inputStream.bufferedReader().use { it.readText() }
-        } finally {
-            conn.disconnect()
+            once()
+        } catch (e: IOException) {
+            Thread.sleep(1_200)   // 限流退避后重试一次
+            once()
         }
     }
 }
