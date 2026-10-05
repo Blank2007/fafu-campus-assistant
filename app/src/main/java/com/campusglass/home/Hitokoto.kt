@@ -24,18 +24,17 @@ object Hitokoto {
             .apply()
     }
 
-    /** 今日已缓存的句子（无网络时兜底显示） */
+    /** 显示兜底：上次保存的一句（不论哪天；断网/获取失败时显示这一条） */
     fun cached(c: Context): Quote? {
-        val p = prefs(c)
-        if (p.getString("date", "") != LocalDate.now().toString()) return null
-        val t = p.getString("text", "") ?: return null
-        return if (t.isBlank()) null else Quote(t, p.getString("from", "") ?: "")
+        val t = prefs(c).getString("text", "") ?: return null
+        return if (t.isBlank()) null else Quote(t, prefs(c).getString("from", "") ?: "")
     }
 
-    /** 拉取今日一句（已有缓存直接返回）；后台线程调用 */
+    /** 拉取今日一句（当天已拉过直接返回；拉不到用之前的一条）；后台线程调用 */
     fun fetchToday(c: Context): Quote? {
-        cached(c)?.let { return it }
-        val q = fetch() ?: return null
+        val p = prefs(c)
+        if (p.getString("date", "") == LocalDate.now().toString()) return cached(c)
+        val q = fetch() ?: return cached(c)      // 失败兜底：之前一条
         save(c, q)
         return q
     }

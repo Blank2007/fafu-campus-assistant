@@ -9,7 +9,6 @@ import android.content.res.Configuration
 import android.widget.RemoteViews
 import com.campusglass.R
 import com.campusglass.home.Hitokoto
-import com.campusglass.schedule.PeriodTable
 import com.campusglass.schedule.ScheduleStore
 import java.time.LocalDate
 
@@ -118,11 +117,7 @@ class TodayWidgetProvider : AppWidgetProvider() {
                 if (quote != null) "「${quote.text}」 —— ${quote.from}（点我换一句）" else "获取失败，点我重试",
             )
 
-            val courses = ScheduleStore.loadCourses(context)
-                .filter { it.weekday == wd && week in it.weeks }
-                .sortedBy { it.startPeriod }
-
-            // 可滚动课程列表（ListView 适配器）
+            // 可滚动课程列表（ListView 适配器；数据由 WidgetListService 提供）
             val svcIntent = Intent(context, WidgetListService::class.java).putExtra("wid", id)
             rv.setRemoteAdapter(R.id.widget_list, svcIntent)
             rv.setEmptyView(R.id.widget_list, R.id.widget_empty_text)
@@ -143,9 +138,9 @@ class TodayWidgetProvider : AppWidgetProvider() {
             )
             rv.setOnClickPendingIntent(R.id.widget_next, nextPi)
 
-            // 诗句：点一下换一句
+            // 诗句：点一下换一句（requestCode 间隔万级，避免多小部件撞车）
             val quotePi = android.app.PendingIntent.getBroadcast(
-                context, id + 1000,
+                context, id + 10000,
                 Intent(context, TodayWidgetProvider::class.java)
                     .setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE)
                     .putExtra("op_quote", true)
@@ -156,7 +151,7 @@ class TodayWidgetProvider : AppWidgetProvider() {
 
             // 主体点击 → App 课表页
             val pi = android.app.PendingIntent.getActivity(
-                context, id + 2000,
+                context, id + 20000,
                 Intent(context, com.campusglass.MainActivity::class.java)
                     .putExtra("openTab", "schedule")
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
