@@ -1,4 +1,5 @@
 package com.campusglass.ui.glass
+import androidx.compose.material3.MaterialTheme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,8 +50,8 @@ fun Modifier.acrylic(
     dark: Boolean,
     blurRadius: Dp = 26.dp,
     shape: Shape = RoundedCornerShape(26.dp),
+    tint: Color = if (dark) Color(0x9920222C) else Color(0xCCFFFFFF),
 ): Modifier {
-    val tint = if (dark) Color(0x9920222C) else Color(0xCCFFFFFF)
     val style = HazeBlurStyle {
         blurEnabled(true)
         blurRadius(blurRadius)
@@ -85,15 +86,22 @@ fun AcrylicCard(
     content: @Composable () -> Unit,
 ) {
     val glass = LocalGlass.current
-    val customBg = ThemePrefs.bgImagePath.value.isNotBlank()
+    // A4：与背景层判定一致（路径存在 + 文件真在）
+    val customBg = ThemePrefs.bgImagePath.value.isNotBlank() &&
+        java.io.File(ThemePrefs.bgImagePath.value).exists()
     val dark = when (ThemePrefs.themeMode.value) {
         ThemePrefs.ThemeMode.DARK -> true
         ThemePrefs.ThemeMode.LIGHT -> false
         ThemePrefs.ThemeMode.SYSTEM -> isSystemInDarkTheme()
     }
     if (glass != null && customBg && ThemePrefs.acrylicEnabled.value) {
+        // tint 由主题色轻微着色（审查清单）
+        val primary = MaterialTheme.colorScheme.primary
+        val base = if (dark) Color(0xFF20222C) else Color.White
+        val tint = androidx.compose.ui.graphics.lerp(base, primary, 0.06f)
+            .copy(alpha = if (dark) 0.6f else 0.8f)
         Surface(
-            modifier = modifier.acrylic(glass, dark, blurRadius = 22.dp, shape = shape),
+            modifier = modifier.acrylic(glass, dark, blurRadius = 22.dp, shape = shape, tint = tint),
             shape = shape,
             color = Color.Transparent,
             content = content,

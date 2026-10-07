@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/row_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="3dp"
@@ -10,7 +11,7 @@
         android:id="@+id/row_time"
         android:layout_width="48dp"
         android:layout_height="wrap_content"
-        android:textColor="#9CC4FF"
+        android:textColor="@color/widget_time"
         android:textSize="9sp" />
 
     <LinearLayout
@@ -23,7 +24,7 @@
             android:id="@+id/row_name"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#FFFFFF"
+            android:textColor="@color/widget_text"
             android:textSize="11sp"
             android:textStyle="bold" />
 
@@ -31,7 +32,7 @@
             android:id="@+id/row_loc"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#B3FFFFFF"
+            android:textColor="@color/widget_sub"
             android:textSize="9sp" />
     </LinearLayout>
 </LinearLayout>

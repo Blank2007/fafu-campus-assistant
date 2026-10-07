@@ -5,8 +5,7 @@ import android.content.Context
 import android.content.Intent
 
 /**
- * 更新安装完成后自动删除安装包（ACTION_MY_PACKAGE_REPLACED）。
- * 「直接下载安装」的 APK 放在 external-files/updates/，装完即清。
+ * 更新安装完成后：删除安装包（U6）+ 立即刷新桌面小部件（W-4）。
  */
 class UpdateCleanupReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -15,6 +14,11 @@ class UpdateCleanupReceiver : BroadcastReceiver() {
                 val dir = java.io.File(context.getExternalFilesDir(null), "updates")
                 dir.listFiles()?.forEach { it.delete() }
             }
+            runCatching {
+                context.getSharedPreferences("update", Context.MODE_PRIVATE)
+                    .edit().remove("ready_path").apply()
+            }
+            runCatching { com.campusglass.widget.TodayWidgetProvider.pushUpdate(context) }   // W-4
         }
     }
 }

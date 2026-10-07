@@ -100,6 +100,19 @@ fun BusScreen() {
                 }
             }
 
+            if (shown.isEmpty()) {
+                item {
+                    Column(
+                        Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("没有符合「$filter」的线路", style = MaterialTheme.typography.bodyMedium)
+                        Button(onClick = { filter = "全部" }) { Text("清除筛选") }
+                    }
+                }
+            }
+
             item {
                 Text(
                     BusData.SOURCE_NOTE,
@@ -128,12 +141,17 @@ fun BusScreen() {
                         "首班 ${route.firstDeparture} · 末班 ${route.lastDeparture} · ${route.fare}",
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    Text(route.intervalNote, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        route.intervalNote +
+                            if (route.timeOfficial || route.intervalNote.contains("推算")) "" else "（推算）",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
 
                     Text("发车时刻", style = MaterialTheme.typography.titleSmall)
                     if (times.isEmpty()) {
                         Text(
-                            "该线路按官方时刻发车（${route.intervalNote}），建议用「掌上公交」APP 看实时到站。",
+                            "该线路没有固定时刻表（仅有运营时段/间隔区间：${route.intervalNote}），" +
+                                "建议用「掌上公交」APP 看实时到站。",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     } else {
@@ -148,12 +166,24 @@ fun BusScreen() {
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                         )
                         TimeGrid(times)
+                        if (BusData.lastIsStamped(route, times)) {
+                            Text(
+                                "注：${times.last()} 为标称末班（总站发车，仅此时刻），与前一班间隔较短",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                            )
+                        }
                     }
 
                     if (route.upStops.isNotEmpty()) {
                         Text("停靠站点", style = MaterialTheme.typography.titleSmall)
                         StopsLine("上行", route.upStops)
                         StopsLine("下行", route.downStops)
+                        Text(
+                            "注：回程为去程逆序；部分站点仅单向停靠，以站牌为准",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                        )
                     }
                     if (route.note.isNotBlank()) {
                         Text(route.note, style = MaterialTheme.typography.bodySmall)
@@ -218,20 +248,14 @@ private fun StopsLine(label: String, stops: List<String>) {
     Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         stops.forEachIndexed { i, s ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (s == BusData.CAMPUS_STOP) {
-                    Text("★ ", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                    Text(s, style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                } else {
-                    Text("   $s", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            if (i != stops.size - 1) {
-                Text("   ↓", style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f))
-            }
+            val campus = s == BusData.CAMPUS_STOP
+            Text(
+                "${i + 1}. $s" + if (campus) " ★ 校区站" else "",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (campus) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurface,
+                fontWeight = if (campus) FontWeight.Bold else FontWeight.Normal,
+            )
         }
     }
 }

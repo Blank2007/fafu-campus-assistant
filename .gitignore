@@ -11,3 +11,6 @@ captures/
 
 # 打包环境工具链（体积大，不入库）
 parked_out/
+keystore.properties
+*.jks
+*.keystore

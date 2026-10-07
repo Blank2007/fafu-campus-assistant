@@ -30,6 +30,10 @@ object Hitokoto {
         return if (t.isBlank()) null else Quote(t, prefs(c).getString("from", "") ?: "")
     }
 
+    /** 是否需要拉取（当天没拉过才拉，A6：不强刷） */
+    fun needsFetch(c: Context): Boolean =
+        prefs(c).getString("date", "") != LocalDate.now().toString()
+
     /** 拉取今日一句（当天已拉过直接返回；拉不到用之前的一条）；后台线程调用 */
     fun fetchToday(c: Context): Quote? {
         val p = prefs(c)
@@ -41,14 +45,8 @@ object Hitokoto {
 
     /** 强制换一句（小部件点击/首页每次打开）；后台线程调用。连拉最多 3 次确保不是同一句 */
     fun fetchNew(c: Context): Quote? {
-        val old = prefs(c).getString("text", "")
-        var q: Quote? = null
-        for (i in 0 until 3) {
-            val f = fetch() ?: continue
-            q = f
-            if (f.text != old) break
-        }
-        if (q != null) save(c, q)
+        val q = fetch() ?: return cached(c)     // W-3：单次拉取；拉不到用之前一条
+        save(c, q)
         return q
     }
 
@@ -61,8 +59,8 @@ object Hitokoto {
             "https://v1.hitokoto.cn/?c=i&c=d&encode=json&_=${System.currentTimeMillis()}"
         )
             .openConnection() as HttpURLConnection
-        conn.connectTimeout = 8_000
-        conn.readTimeout = 8_000
+        conn.connectTimeout = 3_000
+        conn.readTimeout = 4_000
         val code = conn.responseCode
         if (code !in 200..299) {
             conn.disconnect()

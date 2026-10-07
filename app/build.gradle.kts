@@ -13,8 +13,8 @@ android {
         // 目标环境 Android 15+（HyperOS 4 / Android 17 优先适配），minSdk 31 兼容更广
         minSdk = 31
         targetSdk = 37
-        versionCode = 63
-        versionName = "3.18.zilyf"
+        versionCode = 64
+        versionName = "4.0.sljzy"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -31,12 +31,40 @@ android {
         jniLibs.useLegacyPackaging = false
     }
 
+    // U2 正式签名：在项目根放 keystore.properties（勿提交！已 gitignore）：
+    //   storeFile=/绝对路径/你的.jks
+    //   storePassword=xxx
+    //   keyAlias=xxx
+    //   keyPassword=xxx
+    // 不放则回退 debug 签名（方便直接安装调试）
+    val ksFile = rootProject.file("keystore.properties")
+    val ksMap: Map<String, String> =
+        if (ksFile.exists()) {
+            ksFile.readLines()
+                .mapNotNull { line ->
+                    line.split("=", limit = 2)
+                        .takeIf { it.size == 2 }
+                        ?.let { it[0].trim() to it[1].trim() }
+                }
+                .toMap()
+        } else emptyMap()
+    signingConfigs {
+        if (ksMap.isNotEmpty()) {
+            create("release") {
+                storeFile = file(ksMap.getValue("storeFile"))
+                storePassword = ksMap["storePassword"]
+                keyAlias = ksMap["keyAlias"]
+                keyPassword = ksMap["keyPassword"]
+            }
+        }
+    }
+
     buildTypes {
         release {
             // 体积压缩：R8 混淆 + 资源收缩；用 debug 密钥签名方便直接安装
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -60,6 +88,7 @@ dependencies {
     // ---- Compose（版本由 BOM 统一管理）----
     val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
+    implementation("androidx.exifinterface:exifinterface:1.3.7")   // A3：EXIF 方向
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")

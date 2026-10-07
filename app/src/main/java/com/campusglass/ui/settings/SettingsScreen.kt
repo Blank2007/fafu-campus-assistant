@@ -1,4 +1,6 @@
 package com.campusglass.ui.settings
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -90,6 +92,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
+    "v4.0.sljzy · 2026-10-07 22:40" to "【DeepSeek 两份审查报告全量修复】P0 崩溃丢数据 12 项（数据保护/备份/导入校验/下载校验）+ P1 体验正确性 30 项（可取消查询/失败样式/周次高亮/深色色板/更新安装/公交终到站/小部件周次按日期）+ P2 工程健壮 16 项（正式签名/lint/proguard 清理/夜间主题防闪白）",
     "v3.18.zilyf · 2026-10-06 01:40" to "小部件自查修复：诗词兜底显示上一条（不再误报获取失败）；清理废弃计算与遗留动作；点击区防撞车",
     "v3.17.zilyf · 2026-10-04 00:40" to "检查更新改为弹窗内检查+下载一体化（日志/进度/安装/浏览器二选一）；诗词获取失败显示旧句或明确提示",
     "v3.16.zilyf · 2026-10-04 00:30" to "快递查询模块重写（同一单号多结果根治：单号+公司交叉校验、确定性候选、3 分钟缓存）；全库死代码清理",
@@ -139,7 +142,8 @@ fun SettingsScreen() {
     var expanded by remember { mutableStateOf(false) }
     var showTimeDialog by remember { mutableStateOf(false) }
     var showColorPicker by remember { mutableStateOf(false) }
-    var showUpdate by remember { mutableStateOf(false) }
+    var showUpdate by rememberSaveable { mutableStateOf(false) }
+    var showResetBg by remember { mutableStateOf(false) }
 
     val pickBgImage = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -150,8 +154,16 @@ fun SettingsScreen() {
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     file.outputStream().use { output -> input.copyTo(output) }
                 }
-                ThemePrefs.setBgImage(context, file.absolutePath)   // nonce+1，立即刷新
-                Toast.makeText(context, "背景已更换 ✅（可选裁切方式）", Toast.LENGTH_SHORT).show()
+                // A3：先校验能解码再报成功
+                val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeFile(file.absolutePath, bounds)
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                    file.delete()
+                    Toast.makeText(context, "背景设置失败：图片无法解析", Toast.LENGTH_SHORT).show()
+                } else {
+                    ThemePrefs.setBgImage(context, file.absolutePath)   // nonce+1，立即刷新
+                    Toast.makeText(context, "背景已更换 ✅（可选裁切方式）", Toast.LENGTH_SHORT).show()
+                }
             }.onFailure {
                 Toast.makeText(context, "背景设置失败", Toast.LENGTH_SHORT).show()
             }
@@ -171,8 +183,8 @@ fun SettingsScreen() {
             AcrylicCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("🌙 深色模式", style = MaterialTheme.typography.titleMedium)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ThemePrefs.ThemeMode.entries.forEach { m ->
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(ThemePrefs.ThemeMode.entries.toList()) { m ->
                             FilterChip(
                                 selected = ThemePrefs.themeMode.value == m,
                                 onClick = { ThemePrefs.setThemeMode(context, m) },
@@ -220,16 +232,13 @@ fun SettingsScreen() {
                             modifier = Modifier.weight(1f),
                         ) { Text("选择背景图") }
                         OutlinedButton(
-                            onClick = {
-                                ThemePrefs.setBgImage(context, "")
-                                Toast.makeText(context, "已恢复默认背景", Toast.LENGTH_SHORT).show()
-                            },
+                            onClick = { showResetBg = true },   // T8：先弹确认
                             modifier = Modifier.weight(1f),
                         ) { Text("恢复默认") }
                     }
                     Text("裁切方式（按屏幕尺寸）", style = MaterialTheme.typography.bodySmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ThemePrefs.BgCrop.entries.forEach { c ->
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(ThemePrefs.BgCrop.entries.toList()) { c ->
                             FilterChip(
                                 selected = ThemePrefs.bgCropMode.value == c,
                                 onClick = { ThemePrefs.setBgCrop(context, c) },
@@ -294,8 +303,8 @@ fun SettingsScreen() {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("⚙️ 个性化", style = MaterialTheme.typography.titleMedium)
                     Text("课表字号", style = MaterialTheme.typography.bodySmall)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("小", "中", "大").forEachIndexed { i, t ->
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(listOf("小", "中", "大").withIndex().toList()) { (i, t) ->
                             FilterChip(
                                 selected = ThemePrefs.scheduleFontScale.value == i,
                                 onClick = { ThemePrefs.setFontScale(context, i) },
@@ -370,6 +379,25 @@ fun SettingsScreen() {
                     )
                     if (showUpdate) {
                         UpdateDialog(onDismiss = { showUpdate = false })
+                    }
+                    if (showResetBg) {
+                        androidx.compose.material3.AlertDialog(
+                            onDismissRequest = { showResetBg = false },
+                            title = { Text("恢复默认背景？") },
+                            text = { Text("将移除自定义背景图并删除本机图片文件，确定吗？") },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    val oldPath = ThemePrefs.bgImagePath.value
+                                    ThemePrefs.setBgImage(context, "")
+                                    runCatching { if (oldPath.isNotBlank()) java.io.File(oldPath).delete() }
+                                    showResetBg = false
+                                    Toast.makeText(context, "已恢复默认背景并清理图片", Toast.LENGTH_SHORT).show()
+                                }) { Text("确定") }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showResetBg = false }) { Text("取消") }
+                            },
+                        )
                     }
                     Button(
                         onClick = { showUpdate = true },
@@ -591,6 +619,11 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
                     singleLine = true,
                     label = { Text("自定义每天节数（1-24，可清空后输 13、15 等）") },
                 )
+                if (perDayText.isNotBlank() && perDayText.toIntOrNull()?.let { it !in 1..24 } == true) {
+                    Text("输入超出 1-24 范围，已按边界调整为 $perDayState",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelSmall)
+                }
                 OutlinedTextField(
                     termStartText, { termStartText = it },
                     Modifier.fillMaxWidth(), singleLine = true,
@@ -629,24 +662,60 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
                     dateError = "日期格式不对，应为 2026-08-30（横杠分隔）"
                     return@Button
                 }
+                if (!ScheduleStore.setTermStart(context, d)) {
+                    dateError = "学期起始日需在 2000-2100 年之间"
+                    return@Button
+                }
                 dateError = ""
+                // T2：节次时间格式校验（HH:mm）
+                val timeRe = Regex("^\\d{1,2}:\\d{2}$")
+                var badRow = -1
+                times.value.take(perDayText.toIntOrNull()?.coerceIn(1, 24) ?: perDayState)
+                    .forEachIndexed { i, t ->
+                        val a = t.substringBefore("-"); val b = t.substringAfter("-")
+                        val okA = a == "未设置" || (timeRe.matches(a) && runCatching {
+                            a.split(":")[0].toInt() < 24 && a.split(":")[1].toInt() < 60
+                        }.getOrDefault(false))
+                        val okB = b == "未设置" || (timeRe.matches(b) && runCatching {
+                            b.split(":")[0].toInt() < 24 && b.split(":")[1].toInt() < 60
+                        }.getOrDefault(false))
+                        if ((!okA || !okB) && badRow < 0) badRow = i + 1
+                    }
+                if (badRow > 0) {
+                    dateError = "第 $badRow 节时间格式不对，请用 08:00 这种 HH:mm 格式"
+                    return@Button
+                }
                 PeriodTable.save(context, times.value)
                 PeriodTable.setPeriodsPerDay(
                     context,
                     perDayText.toIntOrNull()?.coerceIn(1, 24) ?: perDayState,
                 )
-                ScheduleStore.setTermStart(context, d)
                 onDismiss()
             }) { Text("保存") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            Row {
+                TextButton(onClick = {
+                    PeriodTable.reset(context)          // T8：恢复默认作息
+                    times.value = PeriodTable.all(context)
+                    perDayState = PeriodTable.periodsPerDay(context)
+                    perDayText = perDayState.toString()
+                    Toast.makeText(context, "已恢复默认作息", Toast.LENGTH_SHORT).show()
+                }) { Text("恢复默认作息") }
+                TextButton(onClick = onDismiss) { Text("取消") }
+            }
         },
     )
 }
 
 /** 检查更新结果 */
-private data class UpdateCheck(val message: String, val newTag: String?)
+private data class UpdateCheck(
+    val message: String,
+    val newTag: String?,
+    val downloadUrl: String? = null,
+    val fileName: String? = null,
+    val sha256: String? = null,
+)
 
 /** 检查更新：读 GitHub Releases 最新版（带 User-Agent + 重试；GitHub API 强制要求 UA） */
 private fun checkUpdate(): UpdateCheck {
@@ -666,6 +735,14 @@ private fun checkUpdate(): UpdateCheck {
                 lastErr = "未找到发布信息"
                 return@runCatching
             }
+            if (code == 403) {
+                // T7：限流专属文案 + 尊重 Retry-After
+                val wait = conn.getHeaderField("Retry-After")?.toLongOrNull()?.coerceIn(1, 5) ?: 2
+                conn.disconnect()
+                lastErr = "GitHub 接口限流，请 ${wait}s 后再试"
+                Thread.sleep(wait * 1000)
+                return@runCatching
+            }
             if (code != 200) {
                 conn.disconnect()
                 lastErr = "HTTP $code"
@@ -675,6 +752,12 @@ private fun checkUpdate(): UpdateCheck {
             conn.disconnect()
             val latest = json.optString("tag_name", "").removePrefix("v").removePrefix("V")
             val body = json.optString("body", "").trim()      // 更新日志
+            // U7：下载地址/文件名/sha256 来自 API 资产（不硬编码）
+            val a0 = json.optJSONArray("assets")?.optJSONObject(0)
+            val assetUrl = a0?.optString("browser_download_url")?.ifBlank { null }
+            val assetName = a0?.optString("name")?.ifBlank { null }
+                ?.replace(Regex("[^A-Za-z0-9._-]"), "_")
+            val assetSha = a0?.optString("digest")?.removePrefix("sha256:")?.ifBlank { null }
             val current = BuildConfig.VERSION_NAME
             // SET-4：数字段比大小（兼容 3.2 / v3.2.0 / 3.2.zilyf 等写法），旧版不再误报
             fun verParts(s: String) = s.split(Regex("[^0-9]+")).mapNotNull { it.toIntOrNull() }
@@ -689,6 +772,9 @@ private fun checkUpdate(): UpdateCheck {
                     "发现新版本 v$latest（当前 v$current）！选一种方式更新" +
                         if (body.isNotBlank()) "\n\n📋 更新日志：\n" + body.take(800) else "",
                     latest,
+                    assetUrl,
+                    assetName,
+                    assetSha,
                 )
             }
         }.onFailure { lastErr = it.message ?: "网络异常" }
@@ -697,31 +783,60 @@ private fun checkUpdate(): UpdateCheck {
 }
 
 
-/** 检查更新弹窗：检查 + 更新日志 + App 内下载安装（进度）/ 浏览器下载 */
+/** 检查更新弹窗 v4（审查 U1-U7 修复）：sha256/包名校验 · 可取消 · 旋转不丢 · 安装预检 · 残包清理 */
 @Composable
 private fun UpdateDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var checking by remember { mutableStateOf(true) }
     var info by remember { mutableStateOf<String?>(null) }
-    var newTag by remember { mutableStateOf<String?>(null) }
+    var check by remember { mutableStateOf<UpdateCheck?>(null) }
     var dlInfo by remember { mutableStateOf("") }
     var downloading by remember { mutableStateOf(false) }
+    var dlJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    val prefs = remember { context.getSharedPreferences("update", android.content.Context.MODE_PRIVATE) }
 
-    androidx.compose.runtime.LaunchedEffect(Unit) {
+    // U6：打开弹窗即清理历史残包（保留正在安装的）
+    LaunchedEffect(Unit) {
+        runCatching {
+            val dir = java.io.File(context.getExternalFilesDir(null), "updates")
+            val keep = prefs.getString("ready_path", "") ?: ""
+            dir.listFiles()?.forEach { if (it.absolutePath != keep) it.delete() }
+        }
         val r = withContext(Dispatchers.IO) { checkUpdate() }
         info = r.message
-        newTag = r.newTag
+        check = r
         checking = false
     }
 
+    // U5：已有下载完成的安装包 → 提供「继续安装」
+    val readyPath = prefs.getString("ready_path", "") ?: ""
+    val readyFile = if (readyPath.isNotBlank()) java.io.File(readyPath) else null
+    val hasReady = readyFile != null && readyFile.exists()
+
+    fun launchInstall(apk: java.io.File) {
+        dlInfo = "调起安装（安装完成后自动删除安装包）"
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            context, context.packageName + ".fileprovider", apk,
+        )
+        val it = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { context.startActivity(it) }.onFailure {
+            dlInfo = "无法调起安装：请允许本应用安装应用，或点「浏览器下载」"
+        }
+    }
+
     AlertDialog(
-        onDismissRequest = { if (!downloading) onDismiss() },
+        onDismissRequest = {
+            if (!downloading) { dlJob?.cancel(); onDismiss() }     // U4：下载中可取消而非被困
+        },
         title = { Text("🔄 检查更新") },
         text = {
             Column(
                 Modifier
-                    .heightIn(max = 360.dp)
+                    .heightIn(max = 380.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -738,98 +853,151 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
                 } else {
                     Text(info ?: "", style = MaterialTheme.typography.bodySmall)
                     if (dlInfo.isNotBlank()) {
-                        Text(
-                            dlInfo,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
+                        Text(dlInfo, style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
         },
         confirmButton = {
-            val tag = newTag
-            if (!checking && tag != null) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Button(
-                        onClick = {
-                            downloading = true
-                            dlInfo = "正在下载 v$tag…"
-                            scope.launch {
-                                val apk = withContext(Dispatchers.IO) {
+            val c = check
+            when {
+                downloading -> {
+                    TextButton(onClick = {                                   // U4：取消下载
+                        dlJob?.cancel()
+                        downloading = false
+                        dlInfo = "已取消下载"
+                    }) { Text("取消下载") }
+                }
+                hasReady -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(onClick = { launchInstall(readyFile!!) }) { Text("继续安装已下载的更新") }
+                        TextButton(onClick = {
+                            readyFile.delete()
+                            prefs.edit().remove("ready_path").apply()
+                            dlInfo = "已删除下载的安装包"
+                        }) { Text("删除") }
+                    }
+                }
+                !checking && c?.newTag != null -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(
+                            onClick = {
+                                // U3：安装未知应用预检 + 去设置
+                                if (!context.packageManager.canRequestPackageInstalls()) {
+                                    dlInfo = "请先允许本应用安装应用（点「去设置」开启后回来重试）"
                                     runCatching {
-                                        val dir = java.io.File(
-                                            context.getExternalFilesDir(null), "updates"
-                                        ).apply { mkdirs() }
-                                        val file = java.io.File(dir, "FAFU-Campus-Assistant-v$tag.apk")
-                                        val conn = java.net.URL(
-                                            "https://github.com/Blank2007/fafu-campus-assistant/releases/" +
-                                                "download/v$tag/FAFU-Campus-Assistant-v$tag.apk"
-                                        ).openConnection() as java.net.HttpURLConnection
-                                        conn.connectTimeout = 15_000
-                                        conn.readTimeout = 60_000
-                                        val total = conn.contentLengthLong
-                                        conn.inputStream.use { input ->
-                                            file.outputStream().use { out ->
-                                                val buf = ByteArray(64 * 1024)
-                                                var done = 0L
-                                                while (true) {
-                                                    val n = input.read(buf)
-                                                    if (n <= 0) break
-                                                    out.write(buf, 0, n)
-                                                    done += n
-                                                    if (total > 0) {
-                                                        dlInfo = "正在下载 v$tag… ${(done * 100 / total).toInt()}%"
+                                        context.startActivity(
+                                            Intent(
+                                                android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                                android.net.Uri.parse("package:" + context.packageName),
+                                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        )
+                                    }
+                                    return@Button
+                                }
+                                downloading = true
+                                dlInfo = "正在下载 v${c.newTag}…"
+                                dlJob = scope.launch {
+                                    val tag = c.newTag
+                                    val url = c.downloadUrl
+                                        ?: "https://github.com/Blank2007/fafu-campus-assistant/releases/" +
+                                        "download/v$tag/FAFU-Campus-Assistant-v$tag.apk"
+                                    val name = c.fileName ?: "FAFU-Campus-Assistant-v$tag.apk"
+                                    val res = withContext(Dispatchers.IO) {
+                                        runCatching {
+                                            val dir = java.io.File(
+                                                context.getExternalFilesDir(null), "updates"
+                                            ).apply { mkdirs() }
+                                            dir.listFiles()?.forEach { it.delete() }        // U6
+                                            val file = java.io.File(dir, name)
+                                            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                                            conn.connectTimeout = 15_000
+                                            conn.readTimeout = 20_000                        // U4：读超时压到 20s
+                                            val total = conn.contentLengthLong
+                                            conn.inputStream.use { input ->
+                                                file.outputStream().use { out ->
+                                                    val buf = ByteArray(64 * 1024)
+                                                    var done = 0L
+                                                    while (true) {
+                                                        val n = input.read(buf)
+                                                        if (n <= 0) break
+                                                        out.write(buf, 0, n)
+                                                        done += n
+                                                        if (total > 0) {
+                                                            dlInfo = "正在下载 v$tag… ${(done * 100 / total).toInt()}%"
+                                                        }
                                                     }
                                                 }
                                             }
-                                        }
-                                        conn.disconnect()
-                                        file
-                                    }.getOrNull()
-                                }
-                                downloading = false
-                                if (apk == null) {
-                                    dlInfo = "下载失败，可点「浏览器下载」试试"
-                                } else {
-                                    dlInfo = "下载完成，调起安装（安装后自动删除安装包）"
-                                    val uri = androidx.core.content.FileProvider.getUriForFile(
-                                        context, context.packageName + ".fileprovider", apk,
-                                    )
-                                    val it = Intent(Intent.ACTION_VIEW).apply {
-                                        setDataAndType(uri, "application/vnd.android.package-archive")
-                                        addFlags(
-                                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                                                Intent.FLAG_ACTIVITY_NEW_TASK
-                                        )
+                                            conn.disconnect()
+                                            // U1：sha256 + 包名校验
+                                            c.sha256?.let { expect ->
+                                                val actual = sha256Of(file)
+                                                if (!actual.equals(expect, ignoreCase = true)) {
+                                                    file.delete()
+                                                    return@runCatching null to "校验失败：文件指纹不匹配，已删除（可去浏览器下载）"
+                                                }
+                                            }
+                                            val pkgOk = runCatching {
+                                                @Suppress("DEPRECATION")
+                                                val pi = context.packageManager
+                                                    .getPackageArchiveInfo(file.absolutePath, 0)
+                                                pi?.packageName == context.packageName
+                                            }.getOrDefault(false)
+                                            if (!pkgOk) {
+                                                file.delete()
+                                                return@runCatching null to "校验失败：安装包不是本应用，已删除"
+                                            }
+                                            file to ""
+                                        }.getOrElse { null to "下载失败：${if (it is java.lang.InterruptedException) "已取消" else "网络异常"}" }
                                     }
-                                    runCatching { context.startActivity(it) }.onFailure {
-                                        dlInfo = "无法调起安装：请在系统设置允许本应用安装应用，或点「浏览器下载」"
+                                    downloading = false
+                                    val (apk, err) = res
+                                    if (apk == null) {
+                                        dlInfo = err.ifBlank { "下载失败，可点「浏览器下载」试试" }
+                                    } else {
+                                        prefs.edit().putString("ready_path", apk.absolutePath).apply()   // U5
+                                        dlInfo = "下载完成并通过校验"
+                                        launchInstall(apk)
                                     }
                                 }
-                            }
-                        },
-                        enabled = !downloading,
-                    ) { Text(if (downloading) "下载中…" else "⬇️ 直接下载安装") }
-                    OutlinedButton(
-                        onClick = {
-                            runCatching {
-                                context.startActivity(
-                                    Intent(
-                                        Intent.ACTION_VIEW,
-                                        Uri.parse("https://github.com/Blank2007/fafu-campus-assistant/releases"),
+                            },
+                            enabled = !downloading,
+                        ) { Text("⬇️ 直接下载安装") }
+                        OutlinedButton(
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse("https://github.com/Blank2007/fafu-campus-assistant/releases"),
+                                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     )
-                                )
-                            }
-                        },
-                    ) { Text("🌐 浏览器下载") }
+                                }
+                            },
+                        ) { Text("🌐 浏览器下载") }
+                    }
                 }
-            } else if (!checking) {
-                TextButton(onClick = onDismiss) { Text("关闭") }
+                !checking -> TextButton(onClick = onDismiss) { Text("关闭") }
             }
         },
         dismissButton = {
             if (!downloading) TextButton(onClick = onDismiss) { Text("取消") }
         },
     )
+}
+
+/** U1：文件 sha256 */
+private fun sha256Of(file: java.io.File): String {
+    val md = java.security.MessageDigest.getInstance("SHA-256")
+    file.inputStream().use { input ->
+        val buf = ByteArray(64 * 1024)
+        while (true) {
+            val n = input.read(buf)
+            if (n <= 0) break
+            md.update(buf, 0, n)
+        }
+    }
+    return md.digest().joinToString("") { "%02x".format(it) }
 }

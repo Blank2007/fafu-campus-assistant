@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_text">#FF1B2233</color>
+    <color name="widget_sub">#661B2233</color>
+    <color name="widget_time">#FF2A5CA8</color>
+</resources>

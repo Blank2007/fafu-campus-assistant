@@ -1,4 +1,6 @@
 package com.campusglass.ui.home
+import kotlinx.coroutines.launch
+import androidx.compose.material3.TextButton
 
 import android.content.Intent
 import android.net.Uri
@@ -45,12 +47,15 @@ private val schoolSites = listOf(
 fun HomeScreen(onGoto: (String) -> Unit) {
     val context = LocalContext.current
 
-    // 每次打开 App 自动拉一句新的（时间戳破缓存，连拉确保不同句）
+    // A6：只有当天没拉过才刷新（不再每次进首页都强刷）
     var quote by remember { mutableStateOf(com.campusglass.home.Hitokoto.cached(context)) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     LaunchedEffect(Unit) {
-        quote = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            com.campusglass.home.Hitokoto.fetchFresh(context)
-                ?: com.campusglass.home.Hitokoto.cached(context)
+        if (com.campusglass.home.Hitokoto.needsFetch(context) || quote == null) {
+            quote = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.campusglass.home.Hitokoto.fetchToday(context)
+                    ?: com.campusglass.home.Hitokoto.cached(context)
+            }
         }
     }
 
@@ -167,6 +172,16 @@ fun HomeScreen(onGoto: (String) -> Unit) {
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
                             )
+                            TextButton(onClick = {
+                                scope.launch {
+                                    val q = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        com.campusglass.home.Hitokoto.fetchNew(context)
+                                    }
+                                    if (q != null) quote = q
+                                }
+                            }) {
+                                Text("⟳ 换一句", style = MaterialTheme.typography.labelSmall)
+                            }
                         } else {
                             Text(
                                 "获取失败，稍后再试（点卡片可重试）",

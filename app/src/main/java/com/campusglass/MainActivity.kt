@@ -98,6 +98,7 @@ class MainActivity : ComponentActivity() {
         }
         super.onCreate(savedInstanceState)
         WidgetNav.pendingTab.value = intent?.getStringExtra("openTab")   // 小部件带参直达
+        intent?.removeExtra("openTab")                                  // A1：消费后移除，旋转不再弹回
         ThemePrefs.load(this)
         setContent {
             CampusGlassTheme {
@@ -142,7 +143,7 @@ fun CampusGlassApp() {
     val acrylicOn = ThemePrefs.acrylicEnabled.value
 
     // 底栏自动隐藏：内容下滑隐藏，上滑出现
-    var barVisible by remember { mutableStateOf(true) }
+    var barVisible by rememberSaveable { mutableStateOf(true) }   // A2
     val scrollConn = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -280,18 +281,23 @@ private fun AppBackground(glass: dev.chrisbanes.haze.HazeState) {
     val crop = ThemePrefs.bgCropMode.value
     val screen = remember { screenSizePx(context) }
 
-    val bitmap = remember(path, nonce, crop, screen) {
+    // A3：异步 + 降采样 + EXIF 方向（不再主线程整图解码）
+    val bitmap by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(
+        initialValue = null, path, nonce, crop, screen,
+    ) {
+        value = null
         if (path.isNotBlank() && File(path).exists()) {
-            runCatching {
-                val src = BitmapFactory.decodeFile(path) ?: return@runCatching null
-                cropToScreen(src, screen.first, screen.second, crop)
-            }.getOrNull()
-        } else null
+            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val decoded = decodeBgBitmap(path, screen.first, screen.second)
+                decoded?.let { runCatching { cropToScreen(it, screen.first, screen.second, crop) }.getOrNull() }
+            }
+        }
     }
 
-    if (bitmap != null) {
+    val bmp = bitmap
+    if (bmp != null) {
         Image(
-            bitmap = bitmap.asImageBitmap(),
+            bitmap = bmp.asImageBitmap(),
             contentDescription = null,
             modifier = Modifier
                 .fillMaxSize()
@@ -316,6 +322,33 @@ private fun screenSizePx(context: Context): Pair<Int, Int> {
 }
 
 /** 按屏幕比例裁切（居中/顶部/底部/适应宽度） */
+/** A3：降采样 + EXIF 方向的背景解码（IO 线程调用） */
+private fun decodeBgBitmap(path: String, reqW: Int, reqH: Int): Bitmap? = runCatching {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(path, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+    var sample = 1
+    while (bounds.outWidth / (sample * 2) >= reqW && bounds.outHeight / (sample * 2) >= reqH) sample *= 2
+    val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+    val bmp = BitmapFactory.decodeFile(path, opts) ?: return null
+    val rot = runCatching {
+        val exif = androidx.exifinterface.media.ExifInterface(path)
+        when (exif.getAttributeInt(
+            androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL,
+        )) {
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+            else -> 0f
+        }
+    }.getOrDefault(0f)
+    if (rot == 0f) bmp else {
+        val m = android.graphics.Matrix().apply { postRotate(rot) }
+        Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+    }
+}.getOrNull()
+
 private fun cropToScreen(src: Bitmap, sw: Int, sh: Int, mode: ThemePrefs.BgCrop): Bitmap {
     if (sw <= 0 || sh <= 0) return src
     val target = sw.toFloat() / sh

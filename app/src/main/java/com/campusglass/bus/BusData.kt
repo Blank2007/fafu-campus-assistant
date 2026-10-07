@@ -36,7 +36,7 @@ object BusData {
 
     val DESTINATIONS = listOf("建发悦城", "万达广场", "动车站")
 
-    val routes = listOf(
+    private val rawRoutes = listOf(
         BusRoute(
             name = "103路（青春快线）",
             endpoints = "福建农林大学南平校区 ⇄ 万达广场",
@@ -185,5 +185,17 @@ object BusData {
         val parts = s.split(":")
         return (parts.getOrNull(0)?.toIntOrNull() ?: return -1) * 60 +
             (parts.getOrNull(1)?.toIntOrNull() ?: 0)
+    }
+
+    /** B2：回程一律为去程逆序（不再出现两个终点/同站异名） */
+    val routes: List<BusRoute>
+        get() = rawRoutes.map { it.copy(downStops = it.upStops.reversed()) }
+
+    /** B1：表尾是否为“硬补的标称末班”（与间隔错位） */
+    fun lastIsStamped(route: BusRoute, times: List<String>): Boolean {
+        if (times.size < 2) return false
+        val step = route.offPeakIntervalMin ?: return false
+        val gap = toMin(times.last()) - toMin(times[times.size - 2])
+        return gap < step
     }
 }

@@ -1,5 +1,4 @@
 package com.campusglass.schedule
-import androidx.compose.foundation.layout.heightIn
 
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -13,11 +12,14 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -36,11 +38,13 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,67 +59,112 @@ import java.time.LocalDate
 
 // ======================= 常量 =======================
 
-/** 高对比课程色块（浅色底 + 黑字，深浅模式都清晰） */
 private val PALETTE = listOf(
     Color(0xFF8FA8FF), Color(0xFFFFBC6B), Color(0xFF6FDFC0), Color(0xFFFF9DB0),
     Color(0xFFC4A0FF), Color(0xFFFFD966), Color(0xFF72D4F0), Color(0xFFAEDD6E),
     Color(0xFFFFAE82), Color(0xFF8FE0D8), Color(0xFFF08FB4), Color(0xFFB3BEFF),
 )
 
-/** 星期标签（1=周一 … 7=周日） */
 private fun dayLabel(wd: Int) = "周" + "一二三四五六日"[wd - 1]
 
-/** 一周显示顺序：周日起始 */
 private val DAY_ORDER = listOf(7, 1, 2, 3, 4, 5, 6)
 
-private const val ROW_H = 74  // 每节行高 dp
+/** S15：行高随字号档位缩放（0.85×/1×/1.2× → 70/78/92dp） */
+private fun rowHeightDp(): Int = when (ThemePrefs.scheduleFontScale.value) {
+    0 -> 70
+    2 -> 92
+    else -> 78
+}
 
 private data class Slot(val weekday: Int, val start: Int, val end: Int)
 
 // ======================= 主界面 =======================
 
-/**
- * 课表 v2：
- * 周日起算 · 一节一行 · 跨节课程纵向占满多格 · 同时段冲突左右分栏 · 课程可编辑。
- */
+/** 课表 v4：跨节占格 · 冲突分栏 · 可编辑 · 分享导入（审查 S1-S24 全量修复） */
 @Composable
 fun ScheduleScreen() {
     val context = LocalContext.current
     var courses by remember { mutableStateOf(ScheduleStore.loadCourses(context)) }
-    var week by remember { mutableIntStateOf(ScheduleStore.currentWeek(context)) }
-    var showAdd by remember { mutableStateOf(false) }
-    var detail by remember { mutableStateOf<Course?>(null) }
-    var editTarget by remember { mutableStateOf<Course?>(null) }
-    var pendingDeleteAll by remember { mutableStateOf<Course?>(null) }   // SC-6
-    var showImport by remember { mutableStateOf(false) }
-    var importText by remember { mutableStateOf("") }
-    var importError by remember { mutableStateOf("") }
+    var week by rememberSaveable { mutableIntStateOf(ScheduleStore.currentWeek(context)) }   // S17
+    var showAdd by rememberSaveable { mutableStateOf(false) }
+    var detailId by rememberSaveable { mutableStateOf("") }        // S17：存 id 不存对象
+    var editId by rememberSaveable { mutableStateOf("") }
+    var pendingDeleteAllId by rememberSaveable { mutableStateOf("") }
+    var showImport by rememberSaveable { mutableStateOf(false) }
+    var importText by rememberSaveable { mutableStateOf("") }      // S17
+    var importError by rememberSaveable { mutableStateOf("") }
+    var importTermOverride by rememberSaveable { mutableStateOf(false) }
 
+    val detail = courses.firstOrNull { it.id == detailId }
+    val editTarget = courses.firstOrNull { it.id == editId }
+    val pendingDeleteAll = courses.firstOrNull { it.id == pendingDeleteAllId }
+
+    fun reload() { courses = ScheduleStore.loadCourses(context) }
+
+    // ---- 导入（S5/S6/S7/S8） ----
     fun doImport(merge: Boolean) {
         val parsed = ScheduleShare.decode(importText)
         if (parsed == null) {
             importError = "分享码无效或不完整，请重新粘贴完整的分享码"
             return
         }
-        val (termStart, imported) = parsed
-        if (merge) {
-            val dedup = imported.filterNot { imp ->
-                courses.any {
-                    it.name == imp.name && it.weekday == imp.weekday &&
-                        it.startPeriod == imp.startPeriod
-                }
-            }
-            courses = courses + dedup
-            Toast.makeText(context, "已合并导入 ${dedup.size} 个时段", Toast.LENGTH_SHORT).show()
-        } else {
-            courses = imported
-            Toast.makeText(context, "已替换为分享的课表", Toast.LENGTH_SHORT).show()
+        if (parsed.courses.isEmpty() && parsed.skipped == 0) {
+            importError = "对方的课表是空的，没有可导入的课程"
+            return
         }
-        ScheduleStore.saveCourses(context, courses)
-        if (termStart.isNotBlank()) {
-            runCatching { ScheduleStore.setTermStart(context, java.time.LocalDate.parse(termStart)) }
+        val (term, imported, skipped) = parsed
+        // S7：自身去重 + 全字段去重键（名称/星期/起止节/周次）
+        fun key(c: Course) = "${c.name}|${c.weekday}|${c.startPeriod}|${c.endPeriod}|${ScheduleStore.compactWeeks(c.weeks)}"
+        val distinct = imported.distinctBy { key(it) }
+
+        if (merge) {
+            val existingKeys = courses.map { key(it) }.toSet()
+            val toAdd = distinct.filterNot { key(it) in existingKeys }
+            // S8：合并导入一律保留本机学期起始日
+            if (!ScheduleStore.saveCourses(context, courses + toAdd)) {
+                importError = "课表数据损坏，已停止写入；请先重置课表"
+                return
+            }
+            Toast.makeText(
+                context,
+                "已合并导入 ${toAdd.size} 个时段" +
+                    (if (distinct.size != toAdd.size) "（去重跳过 ${distinct.size - toAdd.size}）" else "") +
+                    (if (skipped > 0) "，跳过 $skipped 条非法记录" else ""),
+                Toast.LENGTH_LONG,
+            ).show()
+        } else {
+            // S6：替换前自动备份；S8：覆盖学期起始日需显式勾选，且先设日期再保存
+            context.getSharedPreferences("schedule", android.content.Context.MODE_PRIVATE)
+                .edit().putString("courses_backup", org.json.JSONArray().let { a ->
+                    courses.forEach { co ->
+                        a.put(org.json.JSONObject()
+                            .put("name", co.name).put("teacher", co.teacher).put("location", co.location)
+                            .put("weekday", co.weekday).put("start", co.startPeriod).put("end", co.endPeriod)
+                            .put("weeks", ScheduleStore.compactWeeks(co.weeks)))
+                    }
+                    a.toString()
+                }).apply()
+            if (importTermOverride && term.isNotBlank()) {
+                val ok = runCatching {
+                    ScheduleStore.setTermStart(context, java.time.LocalDate.parse(term))
+                }.getOrDefault(false)
+                if (!ok) Toast.makeText(context, "分享的学期起始日不合法，已保留本机设置", Toast.LENGTH_SHORT).show()
+            }
+            if (!ScheduleStore.saveCourses(context, distinct)) {
+                importError = "课表数据损坏，已停止写入；请先重置课表"
+                return
+            }
+            Toast.makeText(
+                context,
+                "已替换为分享的课表（${distinct.size} 个时段，原课表已备份）" +
+                    (if (skipped > 0) "，跳过 $skipped 条非法记录" else ""),
+                Toast.LENGTH_LONG,
+            ).show()
         }
         showImport = false
+        importText = ""
+        importError = ""
+        reload()
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -126,23 +175,84 @@ fun ScheduleScreen() {
         ) {
             item { ScreenHeader("课表") }
 
-            // 分享 / 导入（同软件一键导入）
+            // ---- 警示横幅（S10/S11/S22） ----
+            if (ScheduleStore.dataCorrupt) {
+                item {
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                "⚠️ 课表数据已损坏，为保护原数据已停止写入（原始内容已备份）",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(onClick = {
+                                    ScheduleStore.clearCorrupt(context)
+                                    reload()
+                                    Toast.makeText(context, "已重置为空课表（备份仍保留在本机）", Toast.LENGTH_SHORT).show()
+                                }) { Text("重置课表") }
+                            }
+                        }
+                    }
+                }
+            }
+
+            val periodsNow = PeriodTable.periodsPerDay(context)
+            val hiddenByPeriod = courses.filter { it.startPeriod > periodsNow }.size
+            val weekendHidden = if (!ThemePrefs.showWeekend.value)
+                courses.count { it.weekday == 7 || it.weekday == 6 } else 0
+
+            if (hiddenByPeriod > 0) {
+                item {
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+                        Row(Modifier.padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "⚠️ 有 $hiddenByPeriod 个时段超出当前每天节数（${periodsNow} 节）未显示",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = {
+                                Toast.makeText(context, "请到 设置 → 节次与学期设置 调大每天节数", Toast.LENGTH_LONG).show()
+                            }) { Text("去调整") }
+                        }
+                    }
+                }
+            }
+            if (weekendHidden > 0) {
+                item {
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Row(Modifier.padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "📅 周末还有 $weekendHidden 门课，当前已隐藏",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { ThemePrefs.setShowWeekend(context, true) }) { Text("显示周末") }
+                        }
+                    }
+                }
+            }
+
+            // ---- 分享 / 导入 ----
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
                         onClick = {
-                            val code = ScheduleShare.encode(
-                                courses, ScheduleStore.termStart(context).toString()
-                            )
+                            val code = ScheduleShare.encode(courses, ScheduleStore.termStart(context).toString())
                             val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
                                 as android.content.ClipboardManager
                             cm.setPrimaryClip(android.content.ClipData.newPlainText("课表分享码", code))
                             val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                                 type = "text/plain"
-                                putExtra(
-                                    android.content.Intent.EXTRA_TEXT,
-                                    "我的课表分享码（校园助手 App 课表页点「导入课表」）：\n$code",
-                                )
+                                putExtra(android.content.Intent.EXTRA_TEXT,
+                                    "我的课表分享码（校园助手 App 课表页点「导入课表」）：\n$code")
                             }
                             runCatching {
                                 context.startActivity(android.content.Intent.createChooser(send, "分享课表"))
@@ -153,11 +263,11 @@ fun ScheduleScreen() {
                     ) { Text("📤 分享课表") }
                     OutlinedButton(
                         onClick = {
-                            // 弹窗输入框导入；若剪贴板里已有分享码则预填（可修改）
                             val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
                                 as android.content.ClipboardManager
-                            val text = cm.primaryClip?.getItemAt(0)
-                                ?.coerceToText(context)?.toString().orEmpty()
+                            val text = runCatching {
+                                cm.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()
+                            }.getOrNull().orEmpty()
                             importText = if (text.contains("FAFUSCH1:")) text else ""
                             importError = ""
                             showImport = true
@@ -182,10 +292,14 @@ fun ScheduleScreen() {
                 )
             }
 
+            // ---- 周次芯片（S18 自动滚到当前周；S19 范围动态） ----
             item {
-                // SC-3：周次芯片动态扩展，包含当前周与已有课程的周次
-                val maxWeek = maxOf(20, week, courses.flatMap { it.weeks }.maxOrNull() ?: 20)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val curWeek = ScheduleStore.currentWeek(context)
+                val maxCourseWeek = courses.flatMap { it.weeks }.maxOrNull() ?: 1
+                val maxWeek = maxOf(week, curWeek, maxCourseWeek).coerceAtMost(ScheduleStore.MAX_WEEK)
+                val chipState = rememberLazyListState()
+                LaunchedEffect(week) { chipState.scrollToItem((week - 1).coerceAtLeast(0)) }   // S18
+                LazyRow(state = chipState, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items((1..maxWeek).toList()) { w ->
                         FilterChip(
                             selected = week == w,
@@ -197,88 +311,91 @@ fun ScheduleScreen() {
             }
 
             item { HolidayBanner(week) }
-            item { Timetable(courses, week) { detail = it } }
+            item { Timetable(courses, week) { detailId = it.id } }
         }
 
         ExtendedFloatingActionButton(
             onClick = { showAdd = true },
             icon = { Icon(Icons.Filled.Add, contentDescription = null) },
             text = { Text("添加课程") },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(20.dp),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
         )
     }
 
-    // 详情：编辑 / 删除
+    // ---- 详情（S13/S23） ----
     detail?.let { c ->
         AlertDialog(
-            onDismissRequest = { detail = null },
+            onDismissRequest = { detailId = "" },
             title = { Text(c.name) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(
+                    Modifier
+                        .heightIn(max = 320.dp)
+                        .verticalScroll(rememberScrollState()),      // S13
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
                     Text("老师：${c.teacher.ifBlank { "—" }}", color = MaterialTheme.colorScheme.onSurface)
                     Text("地点：${c.location.ifBlank { "—" }}", color = MaterialTheme.colorScheme.onSurface)
-                    Text("时间：${dayLabel(c.weekday)} 第${c.startPeriod}-${c.endPeriod}节（占${c.endPeriod - c.startPeriod + 1}格）",
+                    val span = (c.endPeriod - c.startPeriod + 1).coerceAtLeast(1)          // S13
+                    Text("时间：${dayLabel(c.weekday)} 第${c.startPeriod}-${c.endPeriod}节（占${span}格）",
                         color = MaterialTheme.colorScheme.onSurface)
-                    Text("周次：" + c.weeks.sorted().joinToString(",") + " 周",
+                    Text("周次：" + ScheduleStore.compactWeeks(c.weeks) + " 周",              // S13 压缩
                         color = MaterialTheme.colorScheme.onSurface)
                 }
             },
             confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                    TextButton(onClick = {
-                        editTarget = c
-                        detail = null
-                    }) { Text("✏️ 编辑") }
-                    TextButton(onClick = {
-                        courses = courses - c
-                        ScheduleStore.saveCourses(context, courses)
-                        detail = null
-                    }) { Text("删除该时段") }
-                    TextButton(onClick = {
-                        pendingDeleteAll = c      // SC-6：二次确认
-                        detail = null
-                    }) { Text("删除同名") }
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = { editId = c.id; detailId = "" }) { Text("✏️ 编辑") }
+                        TextButton(onClick = {
+                            courses = courses - c
+                            ScheduleStore.saveCourses(context, courses)
+                            detailId = ""
+                        }) { Text("删除该时段") }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = {
+                            pendingDeleteAllId = c.id                                     // S6/SC-6
+                            detailId = ""
+                        }) { Text("删除同名全部") }
+                        TextButton(onClick = { detailId = "" }) { Text("关闭") }
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { detail = null }) { Text("关闭") }
             },
         )
     }
 
-    // SC-6：删除同名二次确认
+    // ---- 删除同名确认 ----
     pendingDeleteAll?.let { c ->
         AlertDialog(
-            onDismissRequest = { pendingDeleteAll = null },
+            onDismissRequest = { pendingDeleteAllId = "" },
             title = { Text("删除同名课程？") },
             text = {
-                Text(
-                    "将删除「${c.name}」的全部时段（同名课程会一起删，如两节同名体育）。确定吗？",
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
+                Text("将删除「${c.name}」的全部时段（同名课程会一起删）。确定吗？",
+                    color = MaterialTheme.colorScheme.onSurface)
             },
             confirmButton = {
                 TextButton(onClick = {
                     courses = courses.filterNot { it.name == c.name }
                     ScheduleStore.saveCourses(context, courses)
-                    pendingDeleteAll = null
+                    pendingDeleteAllId = ""
+                    reload()
                 }) { Text("确定删除") }
             },
-            dismissButton = {
-                TextButton(onClick = { pendingDeleteAll = null }) { Text("取消") }
-            },
+            dismissButton = { TextButton(onClick = { pendingDeleteAllId = "" }) { Text("取消") } },
         )
     }
 
-    // 导入弹窗：输入框 + 合并/替换（不再强制读剪贴板）
+    // ---- 导入弹窗（S8：学期起始日显式勾选） ----
     if (showImport) {
         AlertDialog(
             onDismissRequest = { showImport = false },
             title = { Text("📥 导入课表") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    Modifier.imePadding().verticalScroll(rememberScrollState()),   // S16
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     if (importError.isNotBlank()) {
                         Text(importError, color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodySmall)
@@ -292,7 +409,15 @@ fun ScheduleScreen() {
                         Modifier.fillMaxWidth().heightIn(max = 120.dp),
                         label = { Text("分享码") },
                     )
-                    Text("合并＝加到现有课表后（重复自动去重）；替换＝清空现有后导入。",
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.Checkbox(
+                            checked = importTermOverride,
+                            onCheckedChange = { importTermOverride = it },
+                        )
+                        Text("替换导入时同时使用对方的学期起始日（合并导入永不覆盖）",
+                            style = MaterialTheme.typography.labelSmall)
+                    }
+                    Text("合并＝加到现有课表后（全字段去重）；替换＝备份后清空导入。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                 }
@@ -300,34 +425,37 @@ fun ScheduleScreen() {
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(onClick = { doImport(true) }) { Text("合并导入") }
-                    TextButton(onClick = { doImport(false) }) { Text("替换导入") }
+                    Button(onClick = { doImport(false) }) { Text("替换导入") }
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showImport = false }) { Text("取消") }
-            },
+            dismissButton = { TextButton(onClick = { showImport = false }) { Text("取消") } },
         )
     }
 
-    // 新增 / 编辑
+    // ---- 新增 / 编辑 ----
     if (showAdd || editTarget != null) {
         AddCourseDialog(
             initial = editTarget,
-            onDismiss = {
-                showAdd = false
-                editTarget = null
-            },
+            onDismiss = { showAdd = false; editId = "" },
             onSave = { newOnes ->
-                if (editTarget != null) {
-                    courses = courses - editTarget!! + newOnes      // SC-1：保存全部时段，不再丢弃
-                    Toast.makeText(context, "已更新：${newOnes.first().name}（${newOnes.size} 个时段）", Toast.LENGTH_SHORT).show()
+                val ok = if (editTarget != null) {
+                    ScheduleStore.saveCourses(context, courses - editTarget + newOnes)
                 } else {
-                    courses = courses + newOnes
-                    Toast.makeText(context, "已添加：${newOnes.first().name}（${newOnes.size} 个时段）", Toast.LENGTH_SHORT).show()
+                    ScheduleStore.saveCourses(context, courses + newOnes)
                 }
-                ScheduleStore.saveCourses(context, courses)
-                showAdd = false
-                editTarget = null
+                if (!ok) {
+                    Toast.makeText(context, "课表数据损坏，已停止写入；请先重置课表", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(
+                        context,
+                        if (editTarget != null) "已更新：${newOnes.first().name}（${newOnes.size} 个时段）"
+                        else "已添加：${newOnes.first().name}（${newOnes.size} 个时段）",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    showAdd = false
+                    editId = ""
+                    reload()
+                }
             },
         )
     }
@@ -341,18 +469,21 @@ private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Un
     val periods = PeriodTable.periodsPerDay(context)
     val days = if (ThemePrefs.showWeekend.value) DAY_ORDER else listOf(1, 2, 3, 4, 5)
     val todayWd = ScheduleStore.weekdayOf(LocalDate.now())
+    val isCurrentWeek = week == ScheduleStore.currentWeek(context)      // S12
+    val times = remember(periods) { PeriodTable.all(context) }          // S24：只读一次
+    val rowH = rowHeightDp()                                            // S15
+    val timeFont = if (ThemePrefs.scheduleFontScale.value == 2) 9 else 8   // S15
 
     Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(3.dp)) {
         Column(Modifier.padding(vertical = 6.dp, horizontal = 4.dp)) {
-            // 表头
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.width(42.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.width(46.dp), contentAlignment = Alignment.Center) {
                     Text("节", style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurface)
                 }
                 days.forEach { wd ->
                     val date = ScheduleStore.dateOf(context, week, wd)
-                    val today = wd == todayWd
+                    val today = isCurrentWeek && wd == todayWd          // S12
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             dayLabel(wd),
@@ -371,37 +502,29 @@ private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Un
                 }
             }
 
-            // 表体：左侧节次 + 每天一列（格子背景层 + 课程层绝对定位跨行）
             Row {
-                // 节次标签列
-                Column(Modifier.width(42.dp)) {
+                Column(Modifier.width(46.dp)) {
                     (1..periods).forEach { p ->
                         Column(
-                            Modifier.height(ROW_H.dp),
+                            Modifier.height(rowH.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center,
                         ) {
                             Text("$p", style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.onSurface)
-                            Text(
-                                PeriodTable.startStr(context, p),
+                            Text(times.getOrNull(p - 1)?.substringBefore("-") ?: "",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontSize = 7.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                            )
-                            Text(
-                                PeriodTable.endStr(context, p),
+                                fontSize = timeFont.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                            Text(times.getOrNull(p - 1)?.substringAfter("-") ?: "",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontSize = 7.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
-                            )
+                                fontSize = timeFont.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f))
                         }
                     }
                 }
-                // 每天一列
                 days.forEach { wd ->
                     val dayCourses = courses.filter { it.weekday == wd && week in it.weeks }
-                    // 冲突分道：同一时段重叠的课各占一道
                     val lanes = mutableListOf<MutableList<Course>>()
                     dayCourses.sortedBy { it.startPeriod }.forEach { c ->
                         val lane = lanes.firstOrNull { l ->
@@ -413,30 +536,28 @@ private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Un
                     Box(
                         Modifier
                             .weight(1f)
-                            .height((periods * ROW_H).dp)
+                            .height((periods * rowH).dp)
                     ) {
-                        // 背景格子层
                         Column(Modifier.fillMaxSize()) {
-                            (1..periods).forEach { _ ->
+                            repeat(periods) {
                                 Box(
                                     Modifier
-                                        .height(ROW_H.dp)
+                                        .height(rowH.dp)
                                         .fillMaxWidth()
                                         .padding(2.dp)
                                         .background(
-                                            if (wd == todayWd) MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)
+                                            if (isCurrentWeek && wd == todayWd)      // S12
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)
                                             else Color.Transparent,
                                             RoundedCornerShape(8.dp),
                                         )
                                 )
                             }
                         }
-                        // 课程层（绝对定位，跨节纵向占满）
                         Row(Modifier.fillMaxSize()) {
                             lanes.forEach { lane ->
                                 Box(Modifier.weight(1f).fillMaxHeight()) {
                                     lane.forEach { c ->
-                                        // 越界保护：起始节超过每日节数的课不画；跨行不超出表格
                                         if (c.startPeriod in 1..periods) {
                                             val span = (c.endPeriod.coerceAtMost(periods) - c.startPeriod + 1)
                                                 .coerceIn(1, periods)
@@ -445,8 +566,8 @@ private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Un
                                                 Modifier
                                                     .fillMaxWidth()
                                                     .padding(horizontal = 2.dp)
-                                                    .absoluteOffset(y = ((c.startPeriod - 1) * ROW_H + 2).dp)
-                                                    .height((span * ROW_H - 4).dp),
+                                                    .absoluteOffset(y = ((c.startPeriod - 1) * rowH + 2).dp)
+                                                    .height((span * rowH - 4).dp),
                                                 onCourse,
                                             )
                                         }
@@ -463,7 +584,9 @@ private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Un
 
 @Composable
 private fun CourseBlock(c: Course, modifier: Modifier, onCourse: (Course) -> Unit) {
-    val color = PALETTE[Math.floorMod(c.name.hashCode() * 31 + c.weekday * 7 + c.startPeriod, PALETTE.size)]   // SC-8
+    val color = PALETTE[Math.floorMod(
+        c.name.hashCode() * 31 + c.weekday * 7 + c.startPeriod, PALETTE.size
+    )]
     val scale = listOf(0.85f, 1f, 1.2f)[ThemePrefs.scheduleFontScale.value]
     val base = MaterialTheme.typography.labelSmall
     val style = base.copy(fontSize = base.fontSize * scale)
@@ -481,10 +604,12 @@ private fun CourseBlock(c: Course, modifier: Modifier, onCourse: (Course) -> Uni
             Text(c.name, style = style, fontWeight = FontWeight.Bold,
                 color = Color.Black, maxLines = 2)
             if (c.location.isNotBlank()) {
-                Text(c.location, style = style, color = Color.Black.copy(alpha = 0.85f), maxLines = 1)
+                Text(c.location, style = style, color = Color.Black.copy(alpha = 0.85f),
+                    maxLines = 1)
             }
             if (c.teacher.isNotBlank()) {
-                Text(c.teacher, style = style, color = Color.Black.copy(alpha = 0.7f), maxLines = 1)
+                Text(c.teacher, style = style, color = Color.Black.copy(alpha = 0.7f),
+                    maxLines = 1)
             }
         }
     }
@@ -504,6 +629,7 @@ private fun HolidayBanner(week: Int) {
     val dark = ThemePrefs.themeMode.value == ThemePrefs.ThemeMode.DARK ||
         (ThemePrefs.themeMode.value == ThemePrefs.ThemeMode.SYSTEM &&
             androidx.compose.foundation.isSystemInDarkTheme())
+    val stale = today.isAfter(HolidayData.holidays.maxOfOrNull { it.end } ?: today)   // S20
 
     Card(
         Modifier.fillMaxWidth(),
@@ -513,7 +639,11 @@ private fun HolidayBanner(week: Int) {
         ),
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            if (hits.isEmpty()) {
+            if (stale) {
+                Text("假期数据待更新（当前数据仅覆盖到 2026-2027 学年）",   // S20
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface)
+            } else if (hits.isEmpty()) {
                 Text(
                     "本周无假期" + if (todayHoliday != null) " · 今天是【${todayHoliday.name}】🎉" else "",
                     style = MaterialTheme.typography.bodySmall,
@@ -544,38 +674,25 @@ private fun AddCourseDialog(
     onDismiss: () -> Unit,
     onSave: (List<Course>) -> Unit,
 ) {
+    val context = LocalContext.current
     val editing = initial != null
-    val context2 = LocalContext.current
-    val maxP = PeriodTable.periodsPerDay(context2).coerceIn(2, 24)   // 节次上限跟随自定义
-    var name by remember { mutableStateOf(initial?.name ?: "") }
-    var teacher by remember { mutableStateOf(initial?.teacher ?: "") }
-    var location by remember { mutableStateOf(initial?.location ?: "") }
+    val maxP = PeriodTable.periodsPerDay(context).coerceIn(1, 24)       // S10：下界 1
+    var name by rememberSaveable { mutableStateOf(initial?.name ?: "") }
+    var teacher by rememberSaveable { mutableStateOf(initial?.teacher ?: "") }
+    var location by rememberSaveable { mutableStateOf(initial?.location ?: "") }
     val slots = remember {
         mutableStateListOf(
             if (initial != null) Slot(initial.weekday, initial.startPeriod, initial.endPeriod)
-            else Slot(1, 1, 2)
+            else Slot(1, 1, minOf(2, maxP))                              // S10：默认时段夹紧
         )
     }
-    var weeksText by remember {
+    var weeksText by rememberSaveable {
         mutableStateOf(
-            if (initial != null) {
-                // 压缩区间格式：如 1-16 / 2-5,7-8（避免 joinToString("-") 展开成长串）
-                val sorted = initial.weeks.sorted()
-                val sb = StringBuilder()
-                var i = 0
-                while (i < sorted.size) {
-                    var j = i
-                    while (j + 1 < sorted.size && sorted[j + 1] == sorted[j] + 1) j++
-                    if (sb.isNotEmpty()) sb.append(",")
-                    sb.append(if (i == j) "${sorted[i]}" else "${sorted[i]}-${sorted[j]}")
-                    i = j + 1
-                }
-                sb.toString().ifBlank { "1-16" }
-            } else "1-16"
+            if (initial != null) ScheduleStore.compactWeeks(initial.weeks) else "1-16"
         )
     }
-    var parity by remember { mutableIntStateOf(0) }
-    var errorText by remember { mutableStateOf("") }   // UI-13：必填/冲突反馈
+    var parity by rememberSaveable { mutableIntStateOf(0) }
+    var errorText by rememberSaveable { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -583,21 +700,22 @@ private fun AddCourseDialog(
         text = {
             Column(
                 Modifier
-                    .heightIn(max = 480.dp)
+                    .heightIn(max = 460.dp)
+                    .imePadding()                                        // S16
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (errorText.isNotBlank()) {
-                    Text(errorText, color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall)
-                }
-                OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), singleLine = true,
-                    label = { Text("课程名（必填）") })
+                OutlinedTextField(
+                    name, { name = it; errorText = "" },                 // S14
+                    Modifier.fillMaxWidth(), singleLine = true,
+                    label = { Text("课程名（必填）") },
+                    isError = errorText.contains("课程名"),
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(teacher, { teacher = it }, Modifier.weight(1f), singleLine = true,
-                        label = { Text("老师") })
-                    OutlinedTextField(location, { location = it }, Modifier.weight(1f), singleLine = true,
-                        label = { Text("教室") })
+                    OutlinedTextField(teacher, { teacher = it }, Modifier.weight(1f),
+                        singleLine = true, label = { Text("老师") })
+                    OutlinedTextField(location, { location = it }, Modifier.weight(1f),
+                        singleLine = true, label = { Text("教室") })
                 }
 
                 Text("🕐 上课时间（连上多节就把结束节往后选，自动占满多格）",
@@ -665,14 +783,18 @@ private fun AddCourseDialog(
                     }
                 }
                 OutlinedButton(
-                    onClick = { slots.add(Slot(1, 1, 2)) },
+                    onClick = { slots.add(Slot(1, 1, minOf(2, maxP))) },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("＋ 添加上课时间") }
 
                 Text("📅 周次（支持分段，如 2-5,7-8）", style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurface)
-                OutlinedTextField(weeksText, { weeksText = it }, Modifier.fillMaxWidth(), singleLine = true,
-                    label = { Text("周次范围") })
+                OutlinedTextField(
+                    weeksText, { weeksText = it; errorText = "" },        // S14
+                    Modifier.fillMaxWidth(), singleLine = true,
+                    label = { Text("周次范围") },
+                    isError = errorText.contains("周次"),
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("全部周", "单周", "双周").forEachIndexed { i, t ->
                         FilterChip(selected = parity == i, onClick = { parity = i }, label = { Text(t) })
@@ -681,44 +803,56 @@ private fun AddCourseDialog(
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    if (name.isBlank()) {
-                        errorText = "请填写课程名（必填）"
-                        return@Button
-                    }
-                    val parsed = ScheduleStore.parseWeeks(weeksText)
-                    val filtered = parsed.filter { w ->
-                        when (parity) {
-                            1 -> w % 2 == 1
-                            2 -> w % 2 == 0
-                            else -> true
-                        }
-                    }.toSet()
-                    // SC-2：只有周次完全没填才兜底 1-16；奇偶冲突明确报错，不再反向兜底
-                    val weeks = when {
-                        filtered.isNotEmpty() -> filtered
-                        parsed.isEmpty() && parity == 0 -> (1..16).toSet()
-                        else -> {
-                            errorText = "周次与单/双周设置冲突（例如填了奇数周却选了双周），请调整"
+            Column(Modifier.fillMaxWidth()) {
+                if (errorText.isNotBlank()) {                             // S14：错误在按钮上方
+                    Text(errorText, color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 4.dp))
+                }
+                Button(
+                    onClick = {
+                        if (name.isBlank()) {
+                            errorText = "请填写课程名（必填）"
                             return@Button
                         }
-                    }
-                    onSave(
-                        slots.map { s ->
-                            Course(
-                                name = name.trim(),
-                                teacher = teacher.trim(),
-                                location = location.trim(),
-                                weekday = s.weekday,
-                                startPeriod = s.start,
-                                endPeriod = s.end.coerceAtLeast(s.start),
-                                weeks = weeks,
-                            )
+                        // S9：空白=没填才兜底；非空但解析不出必须报错
+                        val parsed = ScheduleStore.parseWeeks(weeksText)
+                        val filtered = parsed.filter { w ->
+                            when (parity) {
+                                1 -> w % 2 == 1
+                                2 -> w % 2 == 0
+                                else -> true
+                            }
+                        }.toSet()
+                        val weeks = when {
+                            filtered.isNotEmpty() -> filtered
+                            weeksText.isBlank() && parity == 0 -> (1..16).toSet()
+                            weeksText.isNotBlank() && parsed.isEmpty() -> {
+                                errorText = "周次解析不出内容，请用 1-16 或 2-5,7-8 这类格式"
+                                return@Button
+                            }
+                            else -> {
+                                errorText = "周次与单/双周设置冲突（例如填了奇数周却选了双周），请调整"
+                                return@Button
+                            }
                         }
-                    )
-                },
-            ) { Text("保存") }
+                        onSave(
+                            slots.map { s ->
+                                Course(
+                                    name = name.trim(),
+                                    teacher = teacher.trim(),
+                                    location = location.trim(),
+                                    weekday = s.weekday,
+                                    startPeriod = s.start,
+                                    endPeriod = s.end.coerceIn(s.start, maxP),   // S10
+                                    weeks = weeks,
+                                )
+                            }
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("保存") }
+            }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("取消") }

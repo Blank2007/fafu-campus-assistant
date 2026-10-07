@@ -5,7 +5,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
+import android.net.Uri
 import android.widget.RemoteViews
 import com.campusglass.R
 import com.campusglass.home.Hitokoto
@@ -13,14 +13,22 @@ import com.campusglass.schedule.ScheduleStore
 import java.time.LocalDate
 
 /**
- * 桌面小部件：课表（今日/明日）+ 每日诗句。
- * - 深/浅双背景跟随系统；无课时居中显示「今日无课」
- * - 右上角箭头：今日 ⇄ 明日；底部诗句：点一下换一句
+ * 桌面小部件 v4（审查 W-1..W-14 修复）：
+ * - 周次按 base 日期计算（W-1）；深浅色交给资源系统（W-6）
+ * - 点击走 PendingIntent 模板 + fill-in（W-5）；requestCode 按角色 data URI 区分（W-8）
+ * - 零点闹钟 + 开机刷新（W-7）；安装完成刷新（W-4）；避免重复渲染（W-12）
  */
 class TodayWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        // 今/明切换与换一句：搭车系统标准动作 APPWIDGET_UPDATE（自定义动作部分系统会丢弃）
+        // 零点 / 开机 / 安装后 的补刷新
+        val data = intent.data?.toString()
+        if (data == "widget://midnight" || intent.action == Intent.ACTION_BOOT_COMPLETED) {
+            pushUpdate(context)
+            scheduleMidnight(context)
+            return
+        }
+        // 今/明切换
         if (intent.getBooleanExtra("op_next", false)) {
             val id = intent.getIntExtra("wid", -1)
             if (id >= 0) {
@@ -30,11 +38,12 @@ class TodayWidgetProvider : AppWidgetProvider() {
             pushUpdate(context)
             return
         }
+        // 换一句（W-3：单次拉取、短超时，不占满广播时限）
         if (intent.getBooleanExtra("op_quote", false)) {
             val pr = goAsync()
             Thread {
                 runCatching {
-                    Hitokoto.fetchFresh(context)
+                    Hitokoto.fetchNew(context)
                     pushUpdate(context)
                 }
                 pr.finish()
@@ -42,31 +51,41 @@ class TodayWidgetProvider : AppWidgetProvider() {
             return
         }
         super.onReceive(context, intent)
-        // 首次/每日：后台拉今日诗句后重绘（不阻塞主线程）
-        refreshQuoteAsync(context, force = false)
+        // W-12：只有当天没拉过/拉到新句时才重绘
+        refreshQuoteAsync(context)
     }
 
     override fun onUpdate(context: Context, mgr: AppWidgetManager, appWidgetIds: IntArray) {
         for (id in appWidgetIds) updateOne(context, mgr, id)
-        // 长按/系统强制刷新：同步刷新可滚动列表数据（v3.12 回归修复）
         if (appWidgetIds.isNotEmpty()) {
             mgr.notifyAppWidgetViewDataChanged(appWidgetIds, R.id.widget_list)
         }
+        scheduleMidnight(context)                                   // W-7
     }
 
-    private fun refreshQuoteAsync(context: Context, force: Boolean) {
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        // W-10：删除小部件时清理它的状态
+        val prefs = context.getSharedPreferences("widget", Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+        appWidgetIds.forEach { editor.remove("off_$it") }
+        editor.apply()
+    }
+
+    private fun refreshQuoteAsync(context: Context) {
+        val before = Hitokoto.cached(context)
         val pr = goAsync()
         Thread {
             runCatching {
-                if (force) Hitokoto.fetchNew(context) else Hitokoto.fetchToday(context)
-                pushUpdate(context)
+                if (Hitokoto.needsFetch(context)) {
+                    val after = Hitokoto.fetchToday(context)
+                    if (after != before) pushUpdate(context)         // W-12：没变化不重绘
+                }
             }
             pr.finish()
         }.start()
     }
 
     companion object {
-
 
         /** 课表/诗句变化后主动刷新所有小部件（含列表数据） */
         fun pushUpdate(context: Context) {
@@ -75,8 +94,27 @@ class TodayWidgetProvider : AppWidgetProvider() {
                 val ids = mgr.getAppWidgetIds(ComponentName(context, TodayWidgetProvider::class.java))
                 for (id in ids) updateOne(context, mgr, id)
                 if (ids.isNotEmpty()) {
-                    mgr.notifyAppWidgetViewDataChanged(ids, R.id.widget_list)   // 列表数据同步刷新
+                    mgr.notifyAppWidgetViewDataChanged(ids, R.id.widget_list)
                 }
+            }
+        }
+
+        /** W-7：零点后 5 分钟自动刷新（每次更新后重排） */
+        private fun scheduleMidnight(context: Context) {
+            runCatching {
+                val am = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+                val pi = android.app.PendingIntent.getBroadcast(
+                    context, 31415,
+                    Intent(context, TodayWidgetProvider::class.java)
+                        .setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE)
+                        .setData(Uri.parse("widget://midnight")),
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+                        android.app.PendingIntent.FLAG_IMMUTABLE,
+                )
+                val next = LocalDate.now().plusDays(1)
+                    .atStartOfDay(java.time.ZoneId.systemDefault())
+                    .plusMinutes(5).toInstant().toEpochMilli()
+                am.set(android.app.AlarmManager.RTC, next, pi)
             }
         }
 
@@ -85,69 +123,62 @@ class TodayWidgetProvider : AppWidgetProvider() {
             val prefs = context.getSharedPreferences("widget", Context.MODE_PRIVATE)
             val offset = prefs.getInt("off_$id", 0)          // 0=今日 1=明日
 
-            // 深/浅双背景
-            val night =
-                (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
-                    Configuration.UI_MODE_NIGHT_YES
-            rv.setInt(
-                R.id.widget_root, "setBackgroundResource",
-                if (night) R.drawable.widget_bg else R.drawable.widget_bg_light,
-            )
-
-            val titleColor = if (night) 0xFFFFFFFF.toInt() else 0xFF1B2233.toInt()
-            val subColor = if (night) 0xB3FFFFFF.toInt() else 0x661B2233.toInt()
-            val timeColor = if (night) 0xFF9CC4FF.toInt() else 0xFF2A5CA8.toInt()
-
             val base = LocalDate.now().plusDays(offset.toLong())
-            val week = ScheduleStore.currentWeek(context)
+            val week = ScheduleStore.weekOf(context, base)   // W-1：按 base 算周次
             val wd = ScheduleStore.weekdayOf(base)
 
-            rv.setInt(R.id.widget_title, "setTextColor", titleColor)
-            rv.setInt(R.id.widget_date, "setTextColor", subColor)
-            rv.setInt(R.id.widget_next, "setTextColor", titleColor)
-            rv.setInt(R.id.widget_quote, "setTextColor", subColor)
             rv.setTextViewText(R.id.widget_title, if (offset == 0) "📚 今日课表" else "📅 明日课表")
             rv.setTextViewText(R.id.widget_date, "第${week}周 · ${base.monthValue}/${base.dayOfMonth}")
             rv.setTextViewText(R.id.widget_next, if (offset == 0) "➡️" else "⬅️")
 
-            // 每日诗句（点击换一句）
+            // 每日诗句
             val quote = Hitokoto.cached(context)
             rv.setTextViewText(
                 R.id.widget_quote,
-                if (quote != null) "「${quote.text}」 —— ${quote.from}（点我换一句）" else "获取失败，点我重试",
+                if (quote != null) "「${quote.text}」 —— ${quote.from}（点我换一句）"
+                else "获取失败，点我重试",
             )
 
-            // 可滚动课程列表（ListView 适配器；数据由 WidgetListService 提供）
+            // 可滚动课程列表
             val svcIntent = Intent(context, WidgetListService::class.java).putExtra("wid", id)
             rv.setRemoteAdapter(R.id.widget_list, svcIntent)
             rv.setEmptyView(R.id.widget_list, R.id.widget_empty_text)
+            // W-13：完全没课表 vs 今天/明天没课
+            val total = ScheduleStore.loadCourses(context).size
             rv.setTextViewText(
                 R.id.widget_empty_text,
-                if (offset == 0) "今日无课" else "明日无课",
+                when {
+                    total == 0 -> "还没有课表\n去 App 里添加课程吧"
+                    offset == 0 -> "今日无课"
+                    else -> "明日无课"
+                },
             )
-            rv.setInt(R.id.widget_empty_text, "setTextColor", titleColor)
 
-            // 右上角箭头：今日 ⇄ 明日（搭车标准 APPWIDGET_UPDATE，必达）
-            val nextPi = android.app.PendingIntent.getBroadcast(
-                context, id,
-                Intent(context, TodayWidgetProvider::class.java)
-                    .setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE)
-                    .putExtra("op_next", true)
-                    .putExtra("wid", id),
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
+            // W-5：列表行点击走模板 + fill-in
+            val rowPi = android.app.PendingIntent.getActivity(
+                context, id + 30000,
+                Intent(context, com.campusglass.MainActivity::class.java)
+                    .putExtra("openTab", "schedule")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+                    android.app.PendingIntent.FLAG_IMMUTABLE,
             )
-            rv.setOnClickPendingIntent(R.id.widget_next, nextPi)
+            rv.setPendingIntentTemplate(R.id.widget_list, rowPi)
 
-            // 诗句：点一下换一句（requestCode 间隔万级，避免多小部件撞车）
-            val quotePi = android.app.PendingIntent.getBroadcast(
-                context, id + 10000,
-                Intent(context, TodayWidgetProvider::class.java)
-                    .setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE)
-                    .putExtra("op_quote", true)
-                    .putExtra("wid", id),
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
-            )
-            rv.setOnClickPendingIntent(R.id.widget_quote, quotePi)
+            // W-8：按角色 data URI 区分，杜绝 requestCode 撞车
+            fun rolePi(role: String, op: String?, req: Int): android.app.PendingIntent =
+                android.app.PendingIntent.getBroadcast(
+                    context, req,
+                    Intent(context, TodayWidgetProvider::class.java)
+                        .setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE)
+                        .setData(Uri.parse("widget://$role/$id"))
+                        .putExtra("wid", id)
+                        .apply { if (op != null) putExtra(op, true) },
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+                        android.app.PendingIntent.FLAG_IMMUTABLE,
+                )
+            rv.setOnClickPendingIntent(R.id.widget_next, rolePi("next", "op_next", 0))
+            rv.setOnClickPendingIntent(R.id.widget_quote, rolePi("quote", "op_quote", 0))
 
             // 主体点击 → App 课表页
             val pi = android.app.PendingIntent.getActivity(
@@ -155,7 +186,8 @@ class TodayWidgetProvider : AppWidgetProvider() {
                 Intent(context, com.campusglass.MainActivity::class.java)
                     .putExtra("openTab", "schedule")
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+                    android.app.PendingIntent.FLAG_IMMUTABLE,
             )
             rv.setOnClickPendingIntent(R.id.widget_root, pi)
 

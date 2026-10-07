@@ -2,7 +2,6 @@ package com.campusglass.widget
 
 import android.content.Context
 import android.content.Intent
-import android.content.res.Configuration
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
 import com.campusglass.R
@@ -11,8 +10,8 @@ import com.campusglass.schedule.ScheduleStore
 import java.time.LocalDate
 
 /**
- * 小部件课程列表数据服务（ListView 可滚动）。
- * 每个小部件实例按 wid 读取自己的今/明偏移。
+ * 小部件课程列表数据服务 v4（W-1/W-2/W-5/W-6/W-9）。
+ * 深浅色由资源系统处理（widget_colors.xml / -night），不再手写颜色。
  */
 class WidgetListService : RemoteViewsService() {
 
@@ -33,7 +32,7 @@ class WidgetListService : RemoteViewsService() {
             val prefs = context.getSharedPreferences("widget", Context.MODE_PRIVATE)
             val offset = prefs.getInt("off_$wid", 0)
             val base = LocalDate.now().plusDays(offset.toLong())
-            val week = ScheduleStore.currentWeek(context)
+            val week = ScheduleStore.weekOf(context, base)        // W-1：按 base 算
             val wd = ScheduleStore.weekdayOf(base)
             items = ScheduleStore.loadCourses(context)
                 .filter { it.weekday == wd && week in it.weeks }
@@ -45,25 +44,25 @@ class WidgetListService : RemoteViewsService() {
         override fun getCount(): Int = items.size
 
         override fun getViewAt(position: Int): RemoteViews {
+            // W-2：越界保护（数据变化瞬间按旧位置取行）
+            if (position !in items.indices) {
+                val empty = RemoteViews(context.packageName, R.layout.widget_empty_row)
+                empty.setTextViewText(R.id.empty_text, "")
+                return empty
+            }
             val c = items[position]
             val rv = RemoteViews(context.packageName, R.layout.widget_row)
 
-            val night =
-                (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
-                    Configuration.UI_MODE_NIGHT_YES
-            val titleColor = if (night) 0xFFFFFFFF.toInt() else 0xFF1B2233.toInt()
-            val subColor = if (night) 0xB3FFFFFF.toInt() else 0x661B2233.toInt()
-            val timeColor = if (night) 0xFF9CC4FF.toInt() else 0xFF2A5CA8.toInt()
-
             val start = runCatching { PeriodTable.startStr(context, c.startPeriod) }.getOrDefault("")
             val end = runCatching { PeriodTable.endStr(context, c.endPeriod) }.getOrDefault("")
-
-            rv.setInt(R.id.row_time, "setTextColor", timeColor)
-            rv.setInt(R.id.row_name, "setTextColor", titleColor)
-            rv.setInt(R.id.row_loc, "setTextColor", subColor)
-            rv.setTextViewText(R.id.row_time, "$start\n$end")          // 上/下课时间
+            rv.setTextViewText(R.id.row_time, "$start\n$end")
             rv.setTextViewText(R.id.row_name, c.name + "（第${c.startPeriod}-${c.endPeriod}节）")
             rv.setTextViewText(R.id.row_loc, c.location.ifBlank { c.teacher }.ifBlank { " " })
+            // W-5：行内点击 fill-in
+            rv.setOnClickFillInIntent(
+                R.id.row_root,
+                Intent().putExtra("openTab", "schedule"),
+            )
             return rv
         }
 
@@ -71,7 +70,9 @@ class WidgetListService : RemoteViewsService() {
 
         override fun getViewTypeCount(): Int = 1
 
-        override fun getItemId(position: Int): Long = position.toLong()
+        // W-9：稳定 id 用课程 id 哈希（不再用 position）
+        override fun getItemId(position: Int): Long =
+            items.getOrNull(position)?.id?.hashCode()?.toLong() ?: position.toLong()
 
         override fun hasStableIds(): Boolean = true
     }
