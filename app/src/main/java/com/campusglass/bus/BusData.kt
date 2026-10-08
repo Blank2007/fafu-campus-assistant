@@ -187,9 +187,11 @@ object BusData {
             (parts.getOrNull(1)?.toIntOrNull() ?: 0)
     }
 
-    /** B2：回程一律为去程逆序（不再出现两个终点/同站异名） */
+    /** B2/V4-18：优先用真实回程站点；只有缺失时才用去程逆序兜底（不再丢真实数据） */
     val routes: List<BusRoute>
-        get() = rawRoutes.map { it.copy(downStops = it.upStops.reversed()) }
+        get() = rawRoutes.map { r ->
+            r.copy(downStops = if (r.downStops.isNotEmpty()) r.downStops else r.upStops.reversed())
+        }
 
     /** B1：表尾是否为“硬补的标称末班”（与间隔错位） */
     fun lastIsStamped(route: BusRoute, times: List<String>): Boolean {

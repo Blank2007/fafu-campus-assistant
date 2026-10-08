@@ -87,14 +87,22 @@ import java.io.File
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
-        // 消除底部黑块：系统导航栏透明 + 关闭系统强制对比度遮罩（黑色横条的真凶）
-        @Suppress("DEPRECATION")
-        window.statusBarColor = android.graphics.Color.TRANSPARENT
-        @Suppress("DEPRECATION")
-        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        // 消除底部黑块：系统栏透明交给 enableEdgeToEdge；关闭系统强制对比度遮罩（V4-23）
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            @Suppress("DEPRECATION")
             window.isStatusBarContrastEnforced = false
+            @Suppress("DEPRECATION")
             window.isNavigationBarContrastEnforced = false
+        }
+        // V4-22：App 内强制深/浅色时，启动主题同步（防冷启动闪相反底色）
+        runCatching {
+            val forcedDark = ThemePrefs.themeMode.value == ThemePrefs.ThemeMode.DARK
+            val forcedLight = ThemePrefs.themeMode.value == ThemePrefs.ThemeMode.LIGHT
+            val sysDark = (resources.configuration.uiMode and
+                android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                android.content.res.Configuration.UI_MODE_NIGHT_YES
+            val darkNow = forcedDark || (sysDark && !forcedLight)
+            setTheme(if (darkNow) R.style.Theme_CampusGlass_Dark else R.style.Theme_CampusGlass)
         }
         super.onCreate(savedInstanceState)
         WidgetNav.pendingTab.value = intent?.getStringExtra("openTab")   // 小部件带参直达
@@ -163,6 +171,7 @@ fun CampusGlassApp() {
         ) {
             // UI-1：系统栏图标深浅跟随 App 主题（而非系统设置）
             val winCtx = androidx.compose.ui.platform.LocalContext.current
+            // V4-23：ContextWrapper 逐层找 Activity（不再静默失效）
             androidx.compose.runtime.SideEffect {
                 val act = winCtx as? android.app.Activity ?: return@SideEffect
                 val controller = androidx.core.view.WindowInsetsControllerCompat(act.window, act.window.decorView)
@@ -327,8 +336,9 @@ private fun decodeBgBitmap(path: String, reqW: Int, reqH: Int): Bitmap? = runCat
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeFile(path, bounds)
     if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+    // V4-17：按总像素上限采样（大图短边也降），避免一次性 48MB 分配
     var sample = 1
-    while (bounds.outWidth / (sample * 2) >= reqW && bounds.outHeight / (sample * 2) >= reqH) sample *= 2
+    while (bounds.outWidth * bounds.outHeight / (sample * sample) > 4_000_000) sample *= 2
     val opts = BitmapFactory.Options().apply { inSampleSize = sample }
     val bmp = BitmapFactory.decodeFile(path, opts) ?: return null
     val rot = runCatching {
@@ -345,7 +355,9 @@ private fun decodeBgBitmap(path: String, reqW: Int, reqH: Int): Bitmap? = runCat
     }.getOrDefault(0f)
     if (rot == 0f) bmp else {
         val m = android.graphics.Matrix().apply { postRotate(rot) }
-        Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+        val rotated = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+        if (rotated !== bmp) bmp.recycle()          // V4-17：回收原图
+        rotated
     }
 }.getOrNull()
 

@@ -92,7 +92,8 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
-    "v4.0.sljzy · 2026-10-07 22:40" to "【DeepSeek 两份审查报告全量修复】P0 崩溃丢数据 12 项（数据保护/备份/导入校验/下载校验）+ P1 体验正确性 30 项（可取消查询/失败样式/周次高亮/深色色板/更新安装/公交终到站/小部件周次按日期）+ P2 工程健壮 16 项（正式签名/lint/proguard 清理/夜间主题防闪白）",
+    "v4.1.sljzy · 2026-10-08 23:30" to "【复核报告修复】备份可恢复入口；替换导入二次确认；开机刷新权限修复；分享码长度自洽；损坏检测到条级；下载真取消；容器色+对比度派生；周次上限按学期；小部件读设置；位图内存优化；单元测试上线（共 27 项）",
+    "v4.0.sljzy · 2026-10-07 22:40" to "【DeepSeek 两份审查报告全量修复】77 项问题逐条推进：完全达成 58 项（P0 崩溃丢数据 / P1 体验正确性 / P2 工程稳健——proguard 清理、夜间主题、签名机制预留【当前仍 debug 签名】）；19 项部分达成已于 v4.1 复核补齐",
     "v3.18.zilyf · 2026-10-06 01:40" to "小部件自查修复：诗词兜底显示上一条（不再误报获取失败）；清理废弃计算与遗留动作；点击区防撞车",
     "v3.17.zilyf · 2026-10-04 00:40" to "检查更新改为弹窗内检查+下载一体化（日志/进度/安装/浏览器二选一）；诗词获取失败显示旧句或明确提示",
     "v3.16.zilyf · 2026-10-04 00:30" to "快递查询模块重写（同一单号多结果根治：单号+公司交叉校验、确定性候选、3 分钟缓存）；全库死代码清理",
@@ -670,8 +671,7 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
                 // T2：节次时间格式校验（HH:mm）
                 val timeRe = Regex("^\\d{1,2}:\\d{2}$")
                 var badRow = -1
-                times.value.take(perDayText.toIntOrNull()?.coerceIn(1, 24) ?: perDayState)
-                    .forEachIndexed { i, t ->
+                times.value.forEachIndexed { i, t ->        // V4-13：校验全部（=保存范围）
                         val a = t.substringBefore("-"); val b = t.substringAfter("-")
                         val okA = a == "未设置" || (timeRe.matches(a) && runCatching {
                             a.split(":")[0].toInt() < 24 && a.split(":")[1].toInt() < 60
@@ -863,10 +863,14 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
             val c = check
             when {
                 downloading -> {
-                    TextButton(onClick = {                                   // U4：取消下载
+                    TextButton(onClick = {                                   // U4/V4-6：取消下载（真打断+清半成品）
                         dlJob?.cancel()
                         downloading = false
                         dlInfo = "已取消下载"
+                        runCatching {
+                            java.io.File(context.getExternalFilesDir(null), "updates")
+                                .listFiles()?.forEach { it.delete() }
+                        }
                     }) { Text("取消下载") }
                 }
                 hasReady -> {
@@ -904,7 +908,9 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
                                         ?: "https://github.com/Blank2007/fafu-campus-assistant/releases/" +
                                         "download/v$tag/FAFU-Campus-Assistant-v$tag.apk"
                                     val name = c.fileName ?: "FAFU-Campus-Assistant-v$tag.apk"
-                                    val res = withContext(Dispatchers.IO) {
+                                    val res = try {
+                                    withContext(Dispatchers.IO) {
+                                      kotlinx.coroutines.runInterruptible {
                                         runCatching {
                                             val dir = java.io.File(
                                                 context.getExternalFilesDir(null), "updates"
@@ -950,7 +956,11 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
                                                 return@runCatching null to "校验失败：安装包不是本应用，已删除"
                                             }
                                             file to ""
-                                        }.getOrElse { null to "下载失败：${if (it is java.lang.InterruptedException) "已取消" else "网络异常"}" }
+                                        }.getOrElse { null to "下载失败：网络异常" }
+                                      }
+                                    }
+                                    } catch (e: kotlinx.coroutines.CancellationException) {
+                                        throw e     // V4-6：取消必须冒泡（不当网络异常）
                                     }
                                     downloading = false
                                     val (apk, err) = res
@@ -958,7 +968,9 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
                                         dlInfo = err.ifBlank { "下载失败，可点「浏览器下载」试试" }
                                     } else {
                                         prefs.edit().putString("ready_path", apk.absolutePath).apply()   // U5
-                                        dlInfo = "下载完成并通过校验"
+                                        dlInfo = if (c.sha256 == null)
+                                            "下载完成（仅校验包名；发布方未提供哈希指纹）"   // V4-26
+                                        else "下载完成并通过完整性校验"
                                         launchInstall(apk)
                                     }
                                 }

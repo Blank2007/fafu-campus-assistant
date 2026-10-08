@@ -63,7 +63,7 @@ fun PickupScreen() {
     var result by remember { mutableStateOf<ExpressApi.Result?>(null) }
     var resultNo by rememberSaveable { mutableStateOf("") }
     var queryJob by remember { mutableStateOf<Job?>(null) }            // E2：可取消
-    var showClearConfirm by remember { mutableStateOf(false) }         // E9
+    var showClearConfirm by rememberSaveable { mutableStateOf(false) }   // E9/V4-20
 
     // E1：读写统一 history2；一次性迁移旧键
     var history by remember {
@@ -95,13 +95,13 @@ fun PickupScreen() {
         queryJob?.cancel()                                                 // E2：取消上一个
         saveHistory((listOf(nu) + history.filter { !it.equals(nu, true) }).take(10))
         loading = true
-        result = null
         resultNo = nu
         queryJob = scope.launch {
             val r = try {
                 withContext(Dispatchers.IO) { ExpressApi.query(nu, force) }
             } catch (e: CancellationException) {
-                return@launch                                             // E2：取消直接退出
+                loading = false
+                return@launch       // E2/V4-20：取消直接退出，保留上一次结果
             }
             if (resultNo == nu) {                                         // E2：防串号
                 result = r

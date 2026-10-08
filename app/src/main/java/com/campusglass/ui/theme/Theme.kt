@@ -29,6 +29,15 @@ private val LightColors = lightColorScheme(
     surfaceContainer = Color(0xFFECF0FA),
     surfaceContainerHigh = Color(0xFFE6EBF6),
     surfaceContainerHighest = Color(0xFFE0E6F2),
+    // V4-10：容器角色（不再落到 M3 偏紫基线）
+    primaryContainer = Color(0xFFDFE3FF),
+    onPrimaryContainer = Color(0xFF0B1547),
+    secondaryContainer = Color(0xFFD3EFE8),
+    onSecondaryContainer = Color(0xFF0C2B25),
+    tertiaryContainer = Color(0xFFFFE3CB),
+    onTertiaryContainer = Color(0xFF3A2308),
+    onSecondary = Color(0xFF0C2B25),
+    onTertiary = Color(0xFF3A2308),
 )
 
 private val DarkColors = darkColorScheme(
@@ -49,6 +58,15 @@ private val DarkColors = darkColorScheme(
     surfaceContainer = Color(0xFF171A26),
     surfaceContainerHigh = Color(0xFF1D2130),
     surfaceContainerHighest = Color(0xFF242838),
+    // V4-10：容器角色
+    primaryContainer = Color(0xFF28377F),
+    onPrimaryContainer = Color(0xFFDCE1FF),
+    secondaryContainer = Color(0xFF1E473E),
+    onSecondaryContainer = Color(0xFFB7E8DC),
+    tertiaryContainer = Color(0xFF5A3A18),
+    onTertiaryContainer = Color(0xFFFFD9B5),
+    onSecondary = Color(0xFFB7E8DC),
+    onTertiary = Color(0xFFFFD9B5),
 )
 
 /** T6：由主色旋转色相派生次要/强调色（避免选粉后青绿撞色） */
@@ -58,6 +76,16 @@ private fun rotateHue(c: Color, deg: Float): Color {
     hs[0] = (hs[0] + deg + 360f) % 360f
     return Color(android.graphics.Color.HSVToColor(hs))
 }
+
+/** V4-11：按亮度选前景色，保证 ≥4.5:1 对比 */
+private fun contrastOn(bg: Color): Color {
+    val lum = 0.299f * bg.red + 0.587f * bg.green + 0.114f * bg.blue
+    return if (lum > 0.55f) Color(0xFF14161C) else Color(0xFFF5F6FA)
+}
+
+/** V4-10：容器色 = 原色向 surface 混合 55% */
+private fun containerOf(c: Color, surface: Color): Color =
+    androidx.compose.ui.graphics.lerp(c, surface, 0.55f)
 
 /**
  * 全局主题：
@@ -87,16 +115,34 @@ fun CampusGlassTheme(
             if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         primary == null ->
             if (dark) DarkColors else LightColors
-        dark -> DarkColors.copy(
-            primary = primary,
-            secondary = rotateHue(primary, 45f),      // T6
-            tertiary = rotateHue(primary, 90f),
-        )
-        else -> LightColors.copy(
-            primary = primary,
-            secondary = rotateHue(primary, 45f),      // T6
-            tertiary = rotateHue(primary, 90f),
-        )
+        dark -> {
+            val sec = rotateHue(primary, 45f)
+            val ter = rotateHue(primary, 90f)
+            val pc = containerOf(primary, DarkColors.surface)
+            val sc = containerOf(sec, DarkColors.surface)
+            val tc = containerOf(ter, DarkColors.surface)
+            DarkColors.copy(
+                primary = primary, secondary = sec, tertiary = ter,          // T6
+                onSecondary = contrastOn(sec), onTertiary = contrastOn(ter), // V4-11
+                primaryContainer = pc, onPrimaryContainer = contrastOn(pc),  // V4-10
+                secondaryContainer = sc, onSecondaryContainer = contrastOn(sc),
+                tertiaryContainer = tc, onTertiaryContainer = contrastOn(tc),
+            )
+        }
+        else -> {
+            val sec = rotateHue(primary, 45f)
+            val ter = rotateHue(primary, 90f)
+            val pc = containerOf(primary, LightColors.surface)
+            val sc = containerOf(sec, LightColors.surface)
+            val tc = containerOf(ter, LightColors.surface)
+            LightColors.copy(
+                primary = primary, secondary = sec, tertiary = ter,
+                onSecondary = contrastOn(sec), onTertiary = contrastOn(ter),
+                primaryContainer = pc, onPrimaryContainer = contrastOn(pc),
+                secondaryContainer = sc, onSecondaryContainer = contrastOn(sc),
+                tertiaryContainer = tc, onTertiaryContainer = contrastOn(tc),
+            )
+        }
     }
     MaterialTheme(colorScheme = colorScheme, content = content)
 }

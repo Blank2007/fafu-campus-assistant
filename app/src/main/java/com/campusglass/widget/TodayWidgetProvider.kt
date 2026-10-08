@@ -69,6 +69,23 @@ class TodayWidgetProvider : AppWidgetProvider() {
         val editor = prefs.edit()
         appWidgetIds.forEach { editor.remove("off_$it") }
         editor.apply()
+        // V4-16：部件删光后取消零点闹钟（不再每天空唤醒）
+        runCatching {
+            val mgr = android.appwidget.AppWidgetManager.getInstance(context)
+            val left = mgr.getAppWidgetIds(ComponentName(context, TodayWidgetProvider::class.java))
+            if (left.isEmpty()) {
+                val am = context.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+                val pi = android.app.PendingIntent.getBroadcast(
+                    context, 31415,
+                    Intent(context, TodayWidgetProvider::class.java)
+                        .setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE)
+                        .setData(Uri.parse("widget://midnight")),
+                    android.app.PendingIntent.FLAG_NO_CREATE or
+                        android.app.PendingIntent.FLAG_IMMUTABLE,
+                )
+                pi?.let { am.cancel(it) }
+            }
+        }
     }
 
     private fun refreshQuoteAsync(context: Context) {

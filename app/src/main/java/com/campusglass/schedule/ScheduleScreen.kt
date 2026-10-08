@@ -94,6 +94,8 @@ fun ScheduleScreen() {
     var importText by rememberSaveable { mutableStateOf("") }      // S17
     var importError by rememberSaveable { mutableStateOf("") }
     var importTermOverride by rememberSaveable { mutableStateOf(false) }
+    var confirmRestore by rememberSaveable { mutableStateOf(false) }   // V4-1
+    var confirmReplace by rememberSaveable { mutableStateOf(false) }   // V4-7
 
     val detail = courses.firstOrNull { it.id == detailId }
     val editTarget = courses.firstOrNull { it.id == editId }
@@ -144,15 +146,16 @@ fun ScheduleScreen() {
                     }
                     a.toString()
                 }).apply()
+            if (!ScheduleStore.saveCourses(context, distinct)) {
+                importError = "课表数据损坏，已停止写入；请先重置课表"
+                return
+            }
+            // V4-14：课表写入成功后才动学期起始日（失败不会半改）
             if (importTermOverride && term.isNotBlank()) {
                 val ok = runCatching {
                     ScheduleStore.setTermStart(context, java.time.LocalDate.parse(term))
                 }.getOrDefault(false)
                 if (!ok) Toast.makeText(context, "分享的学期起始日不合法，已保留本机设置", Toast.LENGTH_SHORT).show()
-            }
-            if (!ScheduleStore.saveCourses(context, distinct)) {
-                importError = "课表数据损坏，已停止写入；请先重置课表"
-                return
             }
             Toast.makeText(
                 context,
@@ -246,6 +249,14 @@ fun ScheduleScreen() {
                     OutlinedButton(
                         onClick = {
                             val code = ScheduleShare.encode(courses, ScheduleStore.termStart(context).toString())
+                            if (code == null) {
+                                Toast.makeText(
+                                    context,
+                                    "课表过大，放不进分享码（请精简课程后再试）",   // V4-4
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                                return@OutlinedButton
+                            }
                             val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
                                 as android.content.ClipboardManager
                             cm.setPrimaryClip(android.content.ClipData.newPlainText("课表分享码", code))
@@ -275,6 +286,16 @@ fun ScheduleScreen() {
                         modifier = Modifier.weight(1f),
                     ) { Text("📥 导入课表") }
                 }
+                // V4-1：备份可恢复（不再只写不读）
+                val backup = ScheduleStore.backupInfo(context)
+                if (backup != null) {
+                    OutlinedButton(
+                        onClick = { confirmRestore = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("♻️ 从备份恢复课表（${backup.first} · ${backup.second} 条）")
+                    }
+                }
             }
 
             item {
@@ -296,7 +317,9 @@ fun ScheduleScreen() {
             item {
                 val curWeek = ScheduleStore.currentWeek(context)
                 val maxCourseWeek = courses.flatMap { it.weeks }.maxOrNull() ?: 1
-                val maxWeek = maxOf(week, curWeek, maxCourseWeek).coerceAtMost(ScheduleStore.MAX_WEEK)
+                // V4-12：按学期推导（未来无课周也可点，能看到假期横幅）
+                val maxWeek = maxOf(week, curWeek + 8, maxCourseWeek, 20)
+                    .coerceAtMost(ScheduleStore.MAX_WEEK)
                 val chipState = rememberLazyListState()
                 LaunchedEffect(week) { chipState.scrollToItem((week - 1).coerceAtLeast(0)) }   // S18
                 LazyRow(state = chipState, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -348,9 +371,14 @@ fun ScheduleScreen() {
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         TextButton(onClick = { editId = c.id; detailId = "" }) { Text("✏️ 编辑") }
                         TextButton(onClick = {
-                            courses = courses - c
-                            ScheduleStore.saveCourses(context, courses)
+                            val next = courses - c
+                            if (ScheduleStore.saveCourses(context, next)) {
+                                Toast.makeText(context, "已删除", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "数据已损坏，删除未生效（已保护原数据）", Toast.LENGTH_LONG).show()
+                            }
                             detailId = ""
+                            reload()          // V4-21：以盘上数据为准
                         }) { Text("删除该时段") }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -376,13 +404,71 @@ fun ScheduleScreen() {
             },
             confirmButton = {
                 TextButton(onClick = {
-                    courses = courses.filterNot { it.name == c.name }
-                    ScheduleStore.saveCourses(context, courses)
+                    val next = courses.filterNot { it.name == c.name }
+                    if (ScheduleStore.saveCourses(context, next)) {
+                        Toast.makeText(context, "已删除同名课程", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "数据已损坏，删除未生效（已保护原数据）", Toast.LENGTH_LONG).show()
+                    }
                     pendingDeleteAllId = ""
-                    reload()
+                    reload()          // V4-21
                 }) { Text("确定删除") }
             },
             dismissButton = { TextButton(onClick = { pendingDeleteAllId = "" }) { Text("取消") } },
+        )
+    }
+
+    // V4-7：替换导入二次确认
+    if (confirmReplace) {
+        val parsedCount = ScheduleShare.decode(importText)?.courses?.size ?: 0
+        AlertDialog(
+            onDismissRequest = { confirmReplace = false },
+            title = { Text("替换导入？") },
+            text = {
+                Text(
+                    "将用 $parsedCount 条课程替换当前 ${courses.size} 条课表。\n" +
+                        "原课表已自动备份，可在课表页点「从备份恢复」找回。确定吗？",
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmReplace = false
+                    doImport(false)
+                }) { Text("确定替换") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmReplace = false }) { Text("取消") }
+            },
+        )
+    }
+
+    // V4-1：从备份恢复确认
+    if (confirmRestore) {
+        AlertDialog(
+            onDismissRequest = { confirmRestore = false },
+            title = { Text("从备份恢复课表？") },
+            text = {
+                Text(
+                    "将用备份替换当前 ${courses.size} 条课表（当前课表会再存一份备份）。确定吗？",
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRestore = false
+                    val n = ScheduleStore.restoreBackup(context)
+                    if (n < 0) {
+                        Toast.makeText(context, "没有可用的备份", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "已恢复备份（$n 条）", Toast.LENGTH_SHORT).show()
+                    }
+                    reload()
+                }) { Text("确定恢复") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRestore = false }) { Text("取消") }
+            },
         )
     }
 
@@ -425,7 +511,7 @@ fun ScheduleScreen() {
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(onClick = { doImport(true) }) { Text("合并导入") }
-                    Button(onClick = { doImport(false) }) { Text("替换导入") }
+                    Button(onClick = { confirmReplace = true }) { Text("替换导入") }   // V4-7
                 }
             },
             dismissButton = { TextButton(onClick = { showImport = false }) { Text("取消") } },
@@ -680,7 +766,18 @@ private fun AddCourseDialog(
     var name by rememberSaveable { mutableStateOf(initial?.name ?: "") }
     var teacher by rememberSaveable { mutableStateOf(initial?.teacher ?: "") }
     var location by rememberSaveable { mutableStateOf(initial?.location ?: "") }
-    val slots = remember {
+    // V4-20：slots 旋转不丢（自定义 Saver）
+    val slots = rememberSaveable(
+        saver = androidx.compose.runtime.saveable.listSaver<MutableList<Slot>, String>(
+            save = { list -> list.map { "${it.weekday}:${it.start}:${it.end}" } },
+            restore = { strs ->
+                mutableStateListOf(*(if (strs.isEmpty()) arrayOf(Slot(1, 1, minOf(2, maxP)))
+                else strs.map {
+                    val a = it.split(":"); Slot(a[0].toInt(), a[1].toInt(), a[2].toInt())
+                }.toTypedArray()))
+            },
+        ),
+    ) {
         mutableStateListOf(
             if (initial != null) Slot(initial.weekday, initial.startPeriod, initial.endPeriod)
             else Slot(1, 1, minOf(2, maxP))                              // S10：默认时段夹紧

@@ -31,6 +31,8 @@
 
     <!-- 检查更新直接下载安装 APK -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- V4-3：小部件开机刷新（缺此权限则 BOOT_COMPLETED 永不投递） -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:allowBackup="false"

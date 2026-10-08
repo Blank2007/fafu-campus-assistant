@@ -25,6 +25,7 @@ class WidgetListService : RemoteViewsService() {
 
         private val wid = intent.getIntExtra("wid", -1)
         private var items: List<com.campusglass.schedule.Course> = emptyList()
+        private var maxP = PeriodTable.MAX_PERIODS                 // V4-24
 
         override fun onCreate() {}
 
@@ -34,8 +35,11 @@ class WidgetListService : RemoteViewsService() {
             val base = LocalDate.now().plusDays(offset.toLong())
             val week = ScheduleStore.weekOf(context, base)        // W-1：按 base 算
             val wd = ScheduleStore.weekdayOf(base)
+            val showWeekend = com.campusglass.ui.theme.ThemePrefs.showWeekend.value   // V4-24
+            maxP = PeriodTable.periodsPerDay(context)                                 // V4-24
             items = ScheduleStore.loadCourses(context)
                 .filter { it.weekday == wd && week in it.weeks }
+                .filter { showWeekend || (it.weekday != 6 && it.weekday != 7) }       // 与 App 一致
                 .sortedBy { it.startPeriod }
         }
 
@@ -55,8 +59,9 @@ class WidgetListService : RemoteViewsService() {
 
             val start = runCatching { PeriodTable.startStr(context, c.startPeriod) }.getOrDefault("")
             val end = runCatching { PeriodTable.endStr(context, c.endPeriod) }.getOrDefault("")
+            val endShown = c.endPeriod.coerceAtMost(maxP)          // V4-24：与 App 节数一致
             rv.setTextViewText(R.id.row_time, "$start\n$end")
-            rv.setTextViewText(R.id.row_name, c.name + "（第${c.startPeriod}-${c.endPeriod}节）")
+            rv.setTextViewText(R.id.row_name, c.name + "（第${c.startPeriod}-${endShown}节）")
             rv.setTextViewText(R.id.row_loc, c.location.ifBlank { c.teacher }.ifBlank { " " })
             // W-5：行内点击 fill-in
             rv.setOnClickFillInIntent(

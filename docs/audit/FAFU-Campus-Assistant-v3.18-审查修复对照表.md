@@ -3,7 +3,7 @@
 > **报告来源**：DeepSeek-V4.1-Flash(High) 两份报告（`FAFU-Campus-Assistant-v3.18-全量审查报告.md` + `FAFU-Campus-Assistant-v3.18-小部件审查报告.md`）  
 > **修复版本**：`v4.0.sljzy`（commit `bde13cb`）  
 > **问题总数**：77 项（P0 崩溃/丢数据、P1 体验正确性、P2 工程健壮）  
-> **核对状态**：逐项比对代码实据 + 7 项终检，零遗漏
+> **核对状态**：逐项比对代码实据 + 7 项终检。口径说明：本表 77 为报告问题条目数；其中 58 项完全达成、19 项部分达成（已在 v4.1 复核补齐）；另有 T1/T4/A5 三项已修但未列入本表
 
 本表用于快速定位每条问题的修复位置，便于日后回溯。
 
@@ -67,7 +67,7 @@
 | T3 | 节数输入超范围无反馈 | `app/src/main/java/com/campusglass/ui/settings/SettingsScreen.kt` | L623 |
 | T5 | 色板角色缺失 | `app/src/main/java/com/campusglass/ui/theme/Theme.kt` | L31 |
 | T6 | 主色不变时次要色撞色 | `app/src/main/java/com/campusglass/ui/theme/Theme.kt` | L55 |
-| U2 | release用debug签名 | `../../../app/build.gradle.kts` | L34 |
+| U2 | release用debug签名 | `app/build.gradle.kts` | L34 |
 | U3 | 无 canRequestPackageInstalls 预检 | `app/src/main/java/com/campusglass/ui/settings/SettingsScreen.kt` | L887 |
 | U4 | 下载不可取消 | `app/src/main/java/com/campusglass/ui/settings/SettingsScreen.kt` | L866 |
 | U5 | 旋转吞掉下载安装 | `app/src/main/java/com/campusglass/ui/settings/SettingsScreen.kt` | L803 |
@@ -109,6 +109,14 @@
 | W14 | 点击区过小 | `app/src/main/res/layout/widget_today.xml` | L39 |
 
 ---
+
+## 补录（已修但未列入上表）
+
+| 编号 | 问题摘要 | 修复位置 | 说明 |
+|---|---|---|---|
+| T1 | 芯片行不换行导致选不到 | `app/src/main/java/com/campusglass/ui/settings/SettingsScreen.kt` | 改 `LazyRow` |
+| T4 | `PeriodTable.all()` 条目错位 | `app/src/main/java/com/campusglass/schedule/ScheduleStore.kt` | 逐条校验按位补齐 |
+| A5 | 输入弹窗缺 `imePadding` | `app/src/main/java/com/campusglass/schedule/ScheduleScreen.kt` | 弹窗键盘避让 |
 
 ## 终检（修复未引入新问题）
 

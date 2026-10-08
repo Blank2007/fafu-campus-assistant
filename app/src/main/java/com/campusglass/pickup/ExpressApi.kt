@@ -98,7 +98,8 @@ object ExpressApi {
         val candidates = mutableListOf<Com>()
         runCatching {
             val auto = JSONObject(
-                get("https://www.kuaidi100.com/autonumber/autoComNum?resultv=2&text=$encoded")
+                get("https://www.kuaidi100.com/autonumber/autoComNum?resultv=2&text=$encoded",
+                    (deadline - System.currentTimeMillis()).coerceIn(1_000, TOTAL_BUDGET_MS))
             )
             val arr = auto.optJSONArray("auto")
             if (arr != null) {
@@ -126,12 +127,14 @@ object ExpressApi {
         // ---- 2) 依序试查 + 交叉校验 ----
         var networkFailures = 0
         var limited = 0                                  // E6：限流计数
+        var serverErr = 0                                // V4-25：服务端异常（不是限流）
         for ((idx, com) in candidates.withIndex()) {
             if (System.currentTimeMillis() > deadline) break        // E2：总时限
             if (idx > 0) delay(400)                                  // 可取消（E2）
 
+            val remain = (deadline - System.currentTimeMillis()).coerceIn(1_000, TOTAL_BUDGET_MS)   // V4-8
             val q = try {
-                get("https://www.kuaidi100.com/query?type=${com.code}&postid=$encoded&phone=")
+                get("https://www.kuaidi100.com/query?type=${com.code}&postid=$encoded&phone=", remain)
             } catch (e: IOException) {
                 if (e.message?.contains("403") == true) limited++ else networkFailures++
                 continue
@@ -143,9 +146,9 @@ object ExpressApi {
             }
 
             val json = runCatching { JSONObject(q) }.getOrNull()
-            if (json == null) { limited++; continue }               // E6：HTML/WAF 页
+            if (json == null) { serverErr++; continue }             // V4-25：响应非 JSON（接口异常，非限流）
             if (json.optString("status") != "200") {
-                limited++                                           // E6：服务端错误/限流
+                serverErr++                                         // V4-25：服务端错误（如公司代码无效）
                 continue
             }
             // E4：condition 以 F 开头即无结果（不只认 F00）
@@ -177,11 +180,13 @@ object ExpressApi {
 
         // ---- 3) 失败文案（E6：区分限流 / 网络 / 查不到） ----
         val fail = when {
-            limited > 0 && networkFailures == 0 ->
-                "查询过于频繁或接口繁忙，被限流了，请稍等几秒再试"
-            networkFailures > 0 && limited == 0 ->
+            limited > 0 && networkFailures == 0 && serverErr == 0 ->
+                "查询过于频繁，被限流了，请稍等几秒再试"
+            networkFailures > 0 && limited == 0 && serverErr == 0 ->
                 "网络异常，请检查网络后重试"
-            limited + networkFailures >= candidates.size && (limited + networkFailures > 0) ->
+            serverErr > 0 && networkFailures == 0 && limited == 0 ->
+                "快递接口暂时不可用（或该单号不支持查询），请稍后再试"
+            limited + networkFailures + serverErr >= candidates.size ->
                 "网络异常或查询接口繁忙，请稍等几秒再试"
             else ->
                 "没查到该单号的轨迹（尝试了：${candidates.joinToString("、") { it.name }}）。" +
@@ -235,12 +240,14 @@ object ExpressApi {
         }
     }
 
-    /** 非 2xx 报错；403 直接标记限流（E6）；仅一次 500ms 有界退避（E2） */
-    private suspend fun get(url: String): String {
+    /** 非 2xx 报错；403 直接标记限流（E6）；仅一次 500ms 有界退避（E2）。
+     *  budgetMs 传入后单次请求超时不超过剩余预算（V4-8：总时限硬约束） */
+    private suspend fun get(url: String, budgetMs: Long = 8_000): String {
         suspend fun once(): String {
             val conn = URL(url).openConnection() as HttpURLConnection
-            conn.connectTimeout = 8_000
-            conn.readTimeout = 8_000
+            val t = budgetMs.coerceIn(1_000, 8_000).toInt()
+            conn.connectTimeout = t
+            conn.readTimeout = t
             conn.setRequestProperty("User-Agent", UA)
             conn.setRequestProperty("Referer", "https://www.kuaidi100.com/")
             val code = conn.responseCode

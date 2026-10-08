@@ -1,4 +1,5 @@
 package com.campusglass.bus
+import androidx.compose.runtime.saveable.rememberSaveable
 
 import android.content.Intent
 import android.net.Uri
@@ -46,8 +47,9 @@ import com.campusglass.ui.widgets.ScreenHeader
 @Composable
 fun BusScreen() {
     val context = LocalContext.current
-    var filter by remember { mutableStateOf("全部") }
-    var detail by remember { mutableStateOf<BusRoute?>(null) }
+    var filter by rememberSaveable { mutableStateOf("全部") }
+    var detailName by rememberSaveable { mutableStateOf("") }   // V4-19：存线路名（可保存）
+    val detail = BusData.routes.firstOrNull { it.name == detailName }
 
     val shown = if (filter == "全部") BusData.routes
     else BusData.routes.filter { filter in it.destTags }
@@ -75,7 +77,7 @@ fun BusScreen() {
                 AcrylicCard(
                     Modifier
                         .fillMaxWidth()
-                        .clickable { detail = route },
+                        .clickable { detailName = route.name },
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(route.name, style = MaterialTheme.typography.titleMedium)
@@ -127,7 +129,7 @@ fun BusScreen() {
     detail?.let { route ->
         val times = BusData.departureTimes(route)
         AlertDialog(
-            onDismissRequest = { detail = null },
+            onDismissRequest = { detailName = "" },
             title = { Text(route.name) },
             text = {
                 Column(
@@ -177,8 +179,8 @@ fun BusScreen() {
 
                     if (route.upStops.isNotEmpty()) {
                         Text("停靠站点", style = MaterialTheme.typography.titleSmall)
-                        StopsLine("上行", route.upStops)
-                        StopsLine("下行", route.downStops)
+                        StopsLine("上行", route.upStops, route.downStops)      // V4-18
+                        StopsLine("下行", route.downStops, route.upStops)      // V4-18
                         Text(
                             "注：回程为去程逆序；部分站点仅单向停靠，以站牌为准",
                             style = MaterialTheme.typography.labelSmall,
@@ -197,7 +199,7 @@ fun BusScreen() {
             },
             confirmButton = {},
             dismissButton = {
-                TextButton(onClick = { detail = null }) { Text("关闭") }
+                TextButton(onClick = { detailName = "" }) { Text("关闭") }
             },
         )
     }
@@ -243,14 +245,17 @@ private fun TimeGrid(times: List<String>) {
 
 /** 站点列表：一行一个站点（校区站高亮） */
 @Composable
-private fun StopsLine(label: String, stops: List<String>) {
+private fun StopsLine(label: String, stops: List<String>, other: List<String> = emptyList()) {
     if (stops.isEmpty()) return
     Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         stops.forEachIndexed { i, s ->
             val campus = s == BusData.CAMPUS_STOP
+            val oneWay = other.isNotEmpty() && other.none { it == s }   // V4-18：单向站标注
             Text(
-                "${i + 1}. $s" + if (campus) " ★ 校区站" else "",
+                "${i + 1}. $s" +
+                    (if (campus) " ★ 校区站" else "") +
+                    (if (oneWay) if (label == "上行") "（仅去程）" else "（仅回程）" else ""),
                 style = MaterialTheme.typography.bodySmall,
                 color = if (campus) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.onSurface,

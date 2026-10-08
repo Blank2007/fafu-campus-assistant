@@ -39,10 +39,9 @@ object PeriodTable {
 
     private fun prefs(c: Context) = c.getSharedPreferences("schedule", Context.MODE_PRIVATE)
 
-    // S24：按 prefs 版本缓存解析结果
+    // S24/V4-15：按 prefs 版本缓存解析结果（含课程表）
     @Volatile private var cacheKey = -1
     @Volatile private var cacheList: List<String> = emptyList()
-
     /** 返回每节 "HH:mm-HH:mm"；条目损坏时按位补 "未设置-未设置"（T4：不再整体错位） */
     fun all(c: Context): List<String> {
         val p = prefs(c)
@@ -54,7 +53,10 @@ object PeriodTable {
         val list = saved?.split(",")?.map { it.trim() } ?: emptyList()
         val normalized = (0 until MAX_PERIODS).map { i ->
             val e = list.getOrNull(i).orEmpty()
-            if (TIME_RE.matches(e)) e else if (i < DEFAULT_TIMES.size && list.isEmpty()) DEFAULT_TIMES[i] else "未设置-未设置"
+            // V4-27：格式 + 数值范围都合法才算（99:99-99:99 不再放过）
+            if (validTimeEntry(e)) e
+            else if (i < DEFAULT_TIMES.size && list.isEmpty()) DEFAULT_TIMES[i]
+            else "未设置-未设置"
         }
         val result = normalized
         synchronized(this) {
@@ -62,6 +64,17 @@ object PeriodTable {
             cacheList = result
         }
         return result
+    }
+
+    /** "HH:mm-HH:mm" 且数值合法（时<24、分<60） */
+    fun validTimeEntry(e: String): Boolean {
+        if (!TIME_RE.matches(e)) return false
+        return e.split("-").all { half ->
+            val parts = half.split(":")
+            val h = parts[0].toIntOrNull() ?: return false
+            val m = parts[1].toIntOrNull() ?: return false
+            h in 0..23 && m in 0..59
+        }
     }
 
     fun save(c: Context, times: List<String>) {
@@ -113,6 +126,10 @@ object ScheduleStore {
 
     private fun prefs(c: Context) = c.getSharedPreferences("schedule", Context.MODE_PRIVATE)
 
+    // V4-15：课程表解析缓存
+    @Volatile private var coursesVer = -1
+    @Volatile private var coursesCache: List<Course> = emptyList()
+
     /** S11：整串数据损坏时为 true，禁止写回（防止把空表覆盖掉原数据） */
     @Volatile
     var dataCorrupt = false
@@ -126,17 +143,21 @@ object ScheduleStore {
     }
 
     fun loadCourses(c: Context): List<Course> {
-        val raw = prefs(c).getString("courses", "[]") ?: "[]"
+        val p = prefs(c)
+        val ver = p.getInt("coursesVer", 0)
+        synchronized(this) {
+            if (ver == coursesVer) return coursesCache      // V4-15：缓存
+        }
+        val raw = p.getString("courses", "[]") ?: "[]"
         val arr = runCatching { JSONArray(raw) }.getOrNull()
         if (arr == null) {
             // S11：整串损坏——置只读标记，绝不静默清空/写回
             dataCorrupt = true
-            prefs(c).edit().putString("courses_corrupt_backup", raw).apply()
+            p.edit().putString("courses_corrupt_backup", raw).apply()
             return emptyList()
         }
-        dataCorrupt = false
         // S5/SC-5：单条损坏跳过，不影响整表
-        return (0 until arr.length()).mapNotNull { i ->
+        val list = (0 until arr.length()).mapNotNull { i ->
             runCatching {
                 val o = arr.getJSONObject(i)
                 Course(
@@ -151,6 +172,18 @@ object ScheduleStore {
                 )
             }.getOrNull()
         }
+        // V4-5：合法数组但条条坏字段 → 同样按损坏处理（防静默覆盖）
+        if (arr.length() > 0 && list.isEmpty()) {
+            dataCorrupt = true
+            p.edit().putString("courses_corrupt_backup", raw).apply()
+            return emptyList()
+        }
+        dataCorrupt = false
+        synchronized(this) {
+            coursesVer = ver
+            coursesCache = list
+        }
+        return list
     }
 
     /** 写回课表；数据损坏保护期间拒绝写入（S11）。返回是否写入成功 */
@@ -166,9 +199,43 @@ object ScheduleStore {
                     .put("weeks", compactWeeks(co.weeks))
             )
         }
-        prefs(c).edit().putString("courses", arr.toString()).apply()
+        prefs(c).edit().putString("courses", arr.toString())
+            .putInt("coursesVer", (coursesVer + 1).coerceAtLeast(0))    // V4-15
+            .apply()
         runCatching { com.campusglass.widget.TodayWidgetProvider.pushUpdate(c) }
         return true
+    }
+
+    // ---- V4-1：备份可恢复（不再只写不读） ----
+
+    /** 备份信息（来源, 条数）；无备份返回 null */
+    fun backupInfo(c: Context): Pair<String, Int>? {
+        val p = prefs(c)
+        val raw = p.getString("courses_backup", null)
+            ?: p.getString("courses_corrupt_backup", null)
+            ?: return null
+        val n = runCatching { JSONArray(raw).length() }.getOrDefault(0)
+        val source = if (p.contains("courses_backup")) "替换导入备份" else "数据损坏备份"
+        return source to n
+    }
+
+    /** 从备份恢复课表（覆盖当前；当前课表同时再备份一份，双保险）。返回恢复条数，失败 -1 */
+    fun restoreBackup(c: Context): Int {
+        val p = prefs(c)
+        val raw = p.getString("courses_backup", null)
+            ?: p.getString("courses_corrupt_backup", null)
+            ?: return -1
+        // 先把当前课表转存到损坏备份槽（双保险）
+        p.getString("courses", null)?.let { current ->
+            if (current != raw) p.edit().putString("courses_corrupt_backup", current).apply()
+        }
+        dataCorrupt = false
+        p.edit().putString("courses", raw)
+            .putInt("coursesVer", (coursesVer + 1).coerceAtLeast(0))
+            .apply()
+        val n = loadCourses(c).size
+        runCatching { com.campusglass.widget.TodayWidgetProvider.pushUpdate(c) }
+        return n
     }
 
     /** 周次集合 → 压缩区间（1-16 / 2-5,7-8） */
@@ -263,14 +330,15 @@ object ScheduleStore {
 object ScheduleShare {
 
     private const val PREFIX = "FAFUSCH1:"
-    private const val MAX_CODE_LEN = 8_000
+    private const val MAX_CODE_LEN = 30_000      // V4-4：与 200 条上限匹配（8000 会自己导不进）
     private const val MAX_INFLATED = 2 * 1024 * 1024
     private const val MAX_COURSES = 200
 
     /** 导入结果：学期起始日 + 课程 + 跳过条数 */
     data class Imported(val termStart: String, val courses: List<Course>, val skipped: Int)
 
-    fun encode(courses: List<Course>, termStart: String): String {
+    /** 生成分享码；课表过大放不下时返回 null（V4-4：自己生成的必须自己导得进） */
+    fun encode(courses: List<Course>, termStart: String): String? {
         val arr = JSONArray()
         courses.take(MAX_COURSES).forEach { c ->
             arr.put(
@@ -280,17 +348,21 @@ object ScheduleShare {
             )
         }
         val json = JSONArray().put(termStart).put(arr).toString()
-        return PREFIX + android.util.Base64.encodeToString(
+        val code = PREFIX + android.util.Base64.encodeToString(
             deflate(json.toByteArray(Charsets.UTF_8)),
             android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP,
         )
+        return if (code.length > MAX_CODE_LEN) null else code   // V4-4：超限明确失败
     }
 
     /** 识别并解析分享码；非法返回 null。识别到但空课表 → 合法（S21） */
     fun decode(text: String): Imported? {
         val idx = text.indexOf(PREFIX)
         if (idx < 0) return null
-        var code = text.substring(idx + PREFIX.length).trim().split(Regex("\\s")).firstOrNull().orEmpty()
+        // V4-9：聊天软件折行/插空格 → 全部剥掉再解码
+        var code = text.substring(idx + PREFIX.length)
+            .replace(Regex("\\s"), "")
+            .split(Regex("\\s")).firstOrNull().orEmpty()
         if (code.isBlank() || code.length > MAX_CODE_LEN) return null        // SH1
         while (code.length % 4 != 0) code += "="                             // SH8：聊天软件吞 padding
 

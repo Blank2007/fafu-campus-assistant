@@ -2,6 +2,14 @@
 <resources>
     <!-- Light 基底 + 禁止系统强制深色（由 Compose 自行适配深色模式，
          避免 force-dark 把已经做好的深色配色反色） -->
+    <!-- V4-22：App 强制深色时显式切换用 -->
+    <style name="Theme.CampusGlass.Dark" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:windowActivityTransitions">true</item>
+    </style>
+
     <style name="Theme.CampusGlass" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>

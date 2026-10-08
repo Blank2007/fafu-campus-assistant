@@ -65,3 +65,7 @@
 ## 📄 License
 
 本项目代码以 MIT 协议开源（第三方依赖遵循其各自许可证）。
+
+## ⚠️ 已知问题（如实声明）
+- 当前 release 使用 **debug 签名**（正式签名机制已预留：项目根放 `keystore.properties` 即启用）
+- `lint` 发布前检查在构建机关内存下关闭（`checkReleaseBuilds = false`），单测已上线兜底纯逻辑

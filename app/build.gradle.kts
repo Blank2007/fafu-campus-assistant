@@ -13,8 +13,8 @@ android {
         // 目标环境 Android 15+（HyperOS 4 / Android 17 优先适配），minSdk 31 兼容更广
         minSdk = 31
         targetSdk = 37
-        versionCode = 64
-        versionName = "4.0.sljzy"
+        versionCode = 65
+        versionName = "4.1.sljzy"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -89,6 +89,7 @@ dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
     implementation("androidx.exifinterface:exifinterface:1.3.7")   // A3：EXIF 方向
+    testImplementation("junit:junit:4.13.2")   // V4-28：纯逻辑单测
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
