@@ -152,8 +152,8 @@ class TodayWidgetProvider : AppWidgetProvider() {
             val quote = Hitokoto.cached(context)
             rv.setTextViewText(
                 R.id.widget_quote,
-                if (quote != null) "「${quote.text}」 —— ${quote.from}（点我换一句）"
-                else "获取失败，点我重试",
+                if (quote != null) "「${quote.text}」 —— ${quote.from}"
+                else "获取失败，稍后再试",
             )
 
             // 可滚动课程列表
@@ -195,7 +195,7 @@ class TodayWidgetProvider : AppWidgetProvider() {
                         android.app.PendingIntent.FLAG_IMMUTABLE,
                 )
             rv.setOnClickPendingIntent(R.id.widget_next, rolePi("next", "op_next", 0))
-            rv.setOnClickPendingIntent(R.id.widget_quote, rolePi("quote", "op_quote", 0))
+            // 小部件诗词不提供刷新（按需求）
 
             // 主体点击 → App 课表页
             val pi = android.app.PendingIntent.getActivity(

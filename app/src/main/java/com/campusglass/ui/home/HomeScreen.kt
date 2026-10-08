@@ -138,7 +138,7 @@ fun HomeScreen(onGoto: (String) -> Unit) {
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                             )
                             Text(
-                                "点一下复制 · ⟳ 可换一句",
+                                "点一下复制",
                                 Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.Center,
                                 style = MaterialTheme.typography.labelSmall,
@@ -186,17 +186,42 @@ fun HomeScreen(onGoto: (String) -> Unit) {
                             style = MaterialTheme.typography.titleSmall,
                         )
 
-                        // 下载入口
+                        // 快捷打开 App（已装直接开；未装引导去下载）
                         Button(
+                            onClick = {
+                                val launch = context.packageManager
+                                    .getLaunchIntentForPackage("cn.edu.fafu.iportal")
+                                if (launch != null) {
+                                    runCatching {
+                                        context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                    }
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        "未安装数字FAFU，正在打开下载页面 ⬇️",
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                    runCatching {
+                                        context.startActivity(
+                                            Intent(Intent.ACTION_VIEW, Uri.parse("https://m.fafu.edu.cn/"))
+                                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        )
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("📲 快捷打开 数字FAFU") }
+                        OutlinedButton(
                             onClick = {
                                 runCatching {
                                     context.startActivity(
                                         Intent(Intent.ACTION_VIEW, Uri.parse("https://m.fafu.edu.cn/"))
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     )
                                 }
                             },
                             modifier = Modifier.fillMaxWidth(),
-                        ) { Text("🔗 打开数字FAFU（m.fafu.edu.cn）") }
+                        ) { Text("⬇️ 下载地址（m.fafu.edu.cn）") }
 
                         HorizontalDivider()
 
