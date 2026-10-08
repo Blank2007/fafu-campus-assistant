@@ -1,6 +1,4 @@
 package com.campusglass.ui.home
-import kotlinx.coroutines.launch
-import androidx.compose.material3.TextButton
 
 import android.content.Intent
 import android.net.Uri
@@ -15,21 +13,27 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.campusglass.ui.glass.AcrylicCard
+import kotlinx.coroutines.launch
 
 /** 农大常用网站（已核实可访问） */
 private val schoolSites = listOf(
@@ -39,17 +43,25 @@ private val schoolSites = listOf(
     "📚 福农大教务管理系统" to "http://jwgl.fafu.edu.cn/",
 )
 
+/** 请假模板（点击复制） */
+private const val LEAVE_TEMPLATE = """x导你好！我是202x级xxx专业1班xxx的家长
+学生姓名：xxx
+请假时间：2026年4月3日xx点～2026年4月6日xx点xx分
+请假原因：xx
+具体去向地址：xx省xx市xx区xx街道x号xx室
+请假外出期间也将配合学校做好孩子安全教育，请假结束按时返校！"""
+
 /**
- * 首页（v3.9）：「首页」标题 + 居中板块（官网卡片 + 每日一句卡片）。
- * 每日一句每次打开自动刷新；点击复制。
+ * 首页（v4.2）三行布局：
+ * 1️⃣ 每日一句 → 2️⃣ 数字FAFU（打卡/请假模板）→ 3️⃣ 常用官网
  */
 @Composable
 fun HomeScreen(onGoto: (String) -> Unit) {
     val context = LocalContext.current
 
-    // A6：只有当天没拉过才刷新（不再每次进首页都强刷）
+    // A6：只有当天没拉过才刷新
     var quote by remember { mutableStateOf(com.campusglass.home.Hitokoto.cached(context)) }
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         if (com.campusglass.home.Hitokoto.needsFetch(context) || quote == null) {
             quote = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
@@ -59,8 +71,14 @@ fun HomeScreen(onGoto: (String) -> Unit) {
         }
     }
 
+    fun copyText(label: String, text: String) {
+        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+            as android.content.ClipboardManager
+        cm.setPrimaryClip(android.content.ClipData.newPlainText(label, text))
+        Toast.makeText(context, "已复制到剪贴板 ✅", Toast.LENGTH_SHORT).show()
+    }
+
     Column(Modifier.fillMaxSize()) {
-        // 标题保留
         Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp)) {
             Text(
                 "首页",
@@ -69,7 +87,6 @@ fun HomeScreen(onGoto: (String) -> Unit) {
             )
         }
 
-        // 板块整体居中（内容超高时可滚动）
         Box(
             Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center,
@@ -81,7 +98,154 @@ fun HomeScreen(onGoto: (String) -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // 官网卡片
+
+                // ===== 1️⃣ 每日一句 =====
+                AcrylicCard(
+                    Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 380.dp)
+                        .clickable {
+                            if (quote != null) {
+                                copyText("每日一句", "「${quote!!.text}」 —— ${quote!!.from}")
+                            }
+                        },
+                ) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            "📜 每日一句",
+                            Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        if (quote != null) {
+                            Text(
+                                "「${quote!!.text}」",
+                                Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Start,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                "—— ${quote!!.from}",
+                                Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.End,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            )
+                            Text(
+                                "点一下复制 · ⟳ 可换一句",
+                                Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                            )
+                        } else {
+                            Text(
+                                "获取失败，稍后再试（点卡片可重试）",
+                                Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            )
+                        }
+                        TextButton(
+                            onClick = {
+                                scope.launch {
+                                    val q = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        com.campusglass.home.Hitokoto.fetchNew(context)
+                                    }
+                                    if (q != null) quote = q
+                                }
+                            },
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
+                        ) { Text("⟳ 换一句", style = MaterialTheme.typography.labelSmall) }
+                    }
+                }
+
+                // ===== 2️⃣ 数字FAFU =====
+                AcrylicCard(
+                    Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 380.dp)
+                ) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(
+                            "📱 数字FAFU",
+                            Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+
+                        // 下载入口
+                        Button(
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse("https://m.fafu.edu.cn/"))
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("🔗 打开数字FAFU（m.fafu.edu.cn）") }
+
+                        HorizontalDivider()
+
+                        // 打卡模块
+                        Text("🌙 打卡模块", style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold)
+                        Text(
+                            "本校正常会在 21 点后进行晚归签到，请及时进入「数字FAFU → 主页 → 学生管理」内进行签到 ✅",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            "⚠️ 注意！！！若更换手机，需和辅导员联系在后台更新主设备，否则无法通过认证、无法签到！",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+
+                        HorizontalDivider()
+
+                        // 请假模块
+                        Text("📝 请假模块", style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold)
+                        Text(
+                            "👇 请假模板（点一下复制）",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        )
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { copyText("请假模板", LEAVE_TEMPLATE) },
+                        ) {
+                            Text(
+                                LEAVE_TEMPLATE,
+                                Modifier.fillMaxWidth(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        Text(
+                            "📌 短信自行发送至辅导员，并截图提交至「数字FAFU → 学生管理 → 请假申请材料」中；返校后请及时销假 🏠",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                        )
+                    }
+                }
+
+                // ===== 3️⃣ 常用官网 =====
                 AcrylicCard(
                     Modifier
                         .fillMaxWidth()
@@ -117,80 +281,6 @@ fun HomeScreen(onGoto: (String) -> Unit) {
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                         )
-                    }
-                }
-
-                // 每日一句卡片：标题居中 · 正文靠左 · 来源靠右 · 提示居中 · 点击复制
-                AcrylicCard(
-                    Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 380.dp)
-                        .clickable {
-                            if (quote != null) {
-                                val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
-                                    as android.content.ClipboardManager
-                                cm.setPrimaryClip(
-                                    android.content.ClipData.newPlainText(
-                                        "每日一句", "「${quote!!.text}」 —— ${quote!!.from}"
-                                    )
-                                )
-                                Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                ) {
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(
-                            "📜 每日一句",
-                            Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center,
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                        if (quote != null) {
-                            Text(
-                                "「${quote!!.text}」",
-                                Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Start,          // 正文靠左
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                "—— ${quote!!.from}",
-                                Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.End,            // 来源另起一行靠右
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                            )
-                            Text(
-                                "点一下复制",
-                                Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center,         // 提示居中
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
-                            )
-                            TextButton(onClick = {
-                                scope.launch {
-                                    val q = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                        com.campusglass.home.Hitokoto.fetchNew(context)
-                                    }
-                                    if (q != null) quote = q
-                                }
-                            }) {
-                                Text("⟳ 换一句", style = MaterialTheme.typography.labelSmall)
-                            }
-                        } else {
-                            Text(
-                                "获取失败，稍后再试（点卡片可重试）",
-                                Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                            )
-                        }
                     }
                 }
             }
