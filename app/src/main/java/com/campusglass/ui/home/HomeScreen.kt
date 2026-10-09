@@ -85,6 +85,10 @@ private fun openDigitalFafuApp(context: android.content.Context): Boolean {
     return false
 }
 
+/** 课表查询链接（复制到微信打开） */
+private const val JWC_SCHEDULE_URL =
+    "http://jsxyjwc.fafu.edu.cn/index.html?code=021bBGFa1R7PuM0hQoHa1xvmph3bBGFd&state=STATE#/"
+
 /** 请假模板（点击复制） */
 private const val LEAVE_TEMPLATE = """x导你好！我是202x级xxx专业1班xxx的家长
 学生姓名：xxx
@@ -258,6 +262,27 @@ fun HomeScreen(onGoto: (String) -> Unit) {
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) { Text("⬇️ 下载地址（m.fafu.edu.cn）") }
+
+                        HorizontalDivider()
+
+                        // 查看课表（复制到微信打开）
+                        Text("📅 查看课表", style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold)
+                        OutlinedButton(
+                            onClick = { copyText("课表链接", JWC_SCHEDULE_URL) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("📋 复制课表链接（去微信打开）") }
+                        Text(
+                            JWC_SCHEDULE_URL,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            maxLines = 2,
+                        )
+                        Text(
+                            "复制到微信再点击打开查看课表，或者选择下方教务系统查看 👇",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                        )
 
                         HorizontalDivider()
 

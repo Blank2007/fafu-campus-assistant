@@ -10,12 +10,13 @@
     android:paddingHorizontal="8dp"
     android:paddingVertical="7dp">
 
-    <View
+    <TextView
         android:id="@+id/row_accent"
         android:layout_width="3dp"
         android:layout_height="match_parent"
         android:layout_marginEnd="8dp"
-        android:background="@color/widget_time" />
+        android:background="@color/widget_time"
+        android:text="" />
 
     <LinearLayout
         android:layout_width="0dp"
