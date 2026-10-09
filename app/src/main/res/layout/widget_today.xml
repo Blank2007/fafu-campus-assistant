@@ -5,41 +5,41 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_bg"
     android:orientation="vertical"
-    android:padding="10dp">
+    android:padding="12dp">
 
+    <!-- 标题行：标题 + 日期胶囊 + 箭头按钮 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <!-- 标题 + 周次日期同一行 -->
         <TextView
             android:id="@+id/widget_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:textColor="@color/widget_text"
-            android:textSize="13sp"
+            android:textSize="14sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/widget_date"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/widget_chip_bg"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="3dp"
             android:textColor="@color/widget_sub"
-            android:textSize="10sp" />
+            android:textSize="9sp" />
 
-        <!-- W-14：点击区 44dp+ -->
         <TextView
             android:id="@+id/widget_next"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="44dp"
-            android:minHeight="44dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/widget_btn_bg"
             android:gravity="center"
-            android:padding="10dp"
             android:text="➡️"
             android:textSize="15sp" />
     </LinearLayout>
@@ -49,9 +49,10 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="8dp"
         android:divider="@null"
-        android:dividerHeight="0dp" />
+        android:dividerHeight="0dp"
+        android:listSelector="@android:color/transparent" />
 
     <TextView
         android:id="@+id/widget_empty_text"
@@ -68,9 +69,9 @@
         android:id="@+id/widget_quote"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="8dp"
         android:ellipsize="end"
-        android:gravity="end"
+        android:gravity="start"
         android:maxLines="2"
         android:textColor="@color/widget_sub"
         android:textSize="9sp" />

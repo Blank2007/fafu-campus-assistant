@@ -3,16 +3,19 @@
     android:id="@+id/row_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="3dp"
+    android:layout_marginBottom="4dp"
+    android:background="@drawable/widget_row_bg"
     android:gravity="center_vertical"
-    android:orientation="horizontal">
+    android:orientation="horizontal"
+    android:paddingHorizontal="8dp"
+    android:paddingVertical="7dp">
 
-    <TextView
-        android:id="@+id/row_time"
-        android:layout_width="48dp"
-        android:layout_height="wrap_content"
-        android:textColor="@color/widget_time"
-        android:textSize="9sp" />
+    <View
+        android:id="@+id/row_accent"
+        android:layout_width="3dp"
+        android:layout_height="match_parent"
+        android:layout_marginEnd="8dp"
+        android:background="@color/widget_time" />
 
     <LinearLayout
         android:layout_width="0dp"
@@ -25,8 +28,16 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="@color/widget_text"
-            android:textSize="11sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/row_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:textColor="@color/widget_time"
+            android:textSize="10sp" />
 
         <TextView
             android:id="@+id/row_loc"

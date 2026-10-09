@@ -152,7 +152,7 @@ class TodayWidgetProvider : AppWidgetProvider() {
             val quote = Hitokoto.cached(context)
             rv.setTextViewText(
                 R.id.widget_quote,
-                if (quote != null) "「${quote.text}」 —— ${quote.from}"
+                if (quote != null) "📜 「${quote.text}」 —— ${quote.from}"
                 else "获取失败，稍后再试",
             )
 

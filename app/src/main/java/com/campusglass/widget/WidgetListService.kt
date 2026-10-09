@@ -13,6 +13,13 @@ import java.time.LocalDate
  * 小部件课程列表数据服务 v4（W-1/W-2/W-5/W-6/W-9）。
  * 深浅色由资源系统处理（widget_colors.xml / -night），不再手写颜色。
  */
+/** 课程彩色竖条色板（与课表色系一致） */
+private val ACCENT = intArrayOf(
+    0xFF8FA8FF.toInt(), 0xFFFFBC6B.toInt(), 0xFF6FDFC0.toInt(), 0xFFFF9DB0.toInt(),
+    0xFFC4A0FF.toInt(), 0xFFFFD966.toInt(), 0xFF72D4F0.toInt(), 0xFFAEDD6E.toInt(),
+    0xFFFFAE82.toInt(), 0xFF8FE0D8.toInt(), 0xFFF08FB4.toInt(), 0xFFB3BEFF.toInt(),
+)
+
 class WidgetListService : RemoteViewsService() {
 
     override fun onGetViewFactory(intent: Intent): RemoteViewsFactory =
@@ -60,9 +67,14 @@ class WidgetListService : RemoteViewsService() {
             val start = runCatching { PeriodTable.startStr(context, c.startPeriod) }.getOrDefault("")
             val end = runCatching { PeriodTable.endStr(context, c.endPeriod) }.getOrDefault("")
             val endShown = c.endPeriod.coerceAtMost(maxP)          // V4-24：与 App 节数一致
-            rv.setTextViewText(R.id.row_time, "$start\n$end")
+            rv.setTextViewText(R.id.row_time, "$start - $end")      // 单行时间段（不再上下错位）
             rv.setTextViewText(R.id.row_name, c.name + "（第${c.startPeriod}-${endShown}节）")
             rv.setTextViewText(R.id.row_loc, c.location.ifBlank { c.teacher }.ifBlank { " " })
+            // 课程彩色竖条
+            rv.setInt(
+                R.id.row_accent, "setBackgroundColor",
+                ACCENT[Math.floorMod(c.name.hashCode() * 31 + c.weekday * 7 + c.startPeriod, ACCENT.size)],
+            )
             // W-5：行内点击 fill-in
             rv.setOnClickFillInIntent(
                 R.id.row_root,

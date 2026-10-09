@@ -43,6 +43,48 @@ private val schoolSites = listOf(
     "📚 福农大教务管理系统" to "http://jwgl.fafu.edu.cn/",
 )
 
+/**
+ * 快捷打开数字FAFU（华为云 WeLink 白牌）。
+ * Android 11+ 需 Manifest <queries> 声明包名才可见；再加查活动 + scheme 三级兜底。
+ */
+private fun openDigitalFafuApp(context: android.content.Context): Boolean {
+    val pkg = "cn.edu.fafu.iportal"
+    val pm = context.packageManager
+    // 1) 标准启动
+    runCatching {
+        pm.getLaunchIntentForPackage(pkg)?.let {
+            context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return true
+        }
+    }
+    // 2) 机型 getLaunchIntentForPackage 失灵时：查 MAIN 活动显式拉起
+    runCatching {
+        val q = pm.queryIntentActivities(
+            android.content.Intent(android.content.Intent.ACTION_MAIN).setPackage(pkg), 0
+        )
+        q.firstOrNull()?.let {
+            context.startActivity(
+                android.content.Intent().setComponent(
+                    android.content.ComponentName(it.activityInfo.packageName, it.activityInfo.name)
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            return true
+        }
+    }
+    // 3) WeLink 系常见 scheme 探测
+    for (uri in listOf("iportal://", "iportal://main", "cloudlink://", "welink://")) {
+        val ok = runCatching {
+            context.startActivity(
+                android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(uri))
+                    .setPackage(pkg)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }.isSuccess
+        if (ok) return true
+    }
+    return false
+}
+
 /** 请假模板（点击复制） */
 private const val LEAVE_TEMPLATE = """x导你好！我是202x级xxx专业1班xxx的家长
 学生姓名：xxx
@@ -189,16 +231,10 @@ fun HomeScreen(onGoto: (String) -> Unit) {
                         // 快捷打开 App（已装直接开；未装引导去下载）
                         Button(
                             onClick = {
-                                val launch = context.packageManager
-                                    .getLaunchIntentForPackage("cn.edu.fafu.iportal")
-                                if (launch != null) {
-                                    runCatching {
-                                        context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                                    }
-                                } else {
+                                if (!openDigitalFafuApp(context)) {
                                     Toast.makeText(
                                         context,
-                                        "未安装数字FAFU，正在打开下载页面 ⬇️",
+                                        "未能拉起数字FAFU（可能未安装），已打开下载页面 ⬇️",
                                         Toast.LENGTH_SHORT,
                                     ).show()
                                     runCatching {
