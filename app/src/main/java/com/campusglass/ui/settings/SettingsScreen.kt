@@ -92,6 +92,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
+    "v4.6.sljzy · 2026-10-10 23:25" to "课表周选择器：选中周精确居中+标注当前周+查看其他周时一键回到当前周；官网模块新增官方公众号文本标注（4个）",
     "v4.5.sljzy · 2026-10-09 23:55" to "小部件不可用根治（RemoteViews 白名单违规视图修复，A15/A17 均适用）；小部件尺寸回退不再放大；数字FAFU 新增课表链接（复制到微信打开）",
     "v4.4.sljzy · 2026-10-09 22:55" to "数字FAFU拉起根治（Android11+包可见性 queries + 三级兜底：launcher/查活动/scheme）；小部件UI整体重写（卡片式课程行+彩色竖条+单行时间段+日期胶囊+统一风格）",
     "v4.3.sljzy · 2026-10-08 23:55" to "数字FAFU区分下载地址与快捷打开App（cn.edu.fafu.iportal，未装引导下载）；小部件显示比例调整；首页诗词提示去重；小部件诗词不再带刷新",

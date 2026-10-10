@@ -7,9 +7,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -366,6 +369,49 @@ fun HomeScreen(onGoto: (String) -> Unit) {
                             "点击在浏览器打开（已核实可访问）",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                        )
+
+                        HorizontalDivider()
+
+                        // 官方公众号（微信搜索关注）
+                        Text(
+                            "📱 官方公众号（微信搜索名称关注）",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        val officialAccounts = listOf(
+                            "福建农林大学" to "学校官微 · 校园新闻/通知",
+                            "福建农林大学金山学院" to "学院官微 · 学院动态",
+                            "福建农林大学金山学院教务处" to "成绩/课表查询 · 绑定正方教务账号",
+                            "福建农林大学金山学院彼小星" to "学院团委官微 · 活动/团学资讯",
+                        )
+                        officialAccounts.forEach { (name, desc) ->
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text("🔹", style = MaterialTheme.typography.bodySmall)
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                    )
+                                    Text(
+                                        desc,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            "在微信「搜一搜」输入名称即可关注",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 }

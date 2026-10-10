@@ -13,8 +13,8 @@ android {
         // 目标环境 Android 15+（HyperOS 4 / Android 17 优先适配），minSdk 31 兼容更广
         minSdk = 31
         targetSdk = 37
-        versionCode = 69
-        versionName = "4.5.sljzy"
+        versionCode = 70
+        versionName = "4.6.sljzy"
         vectorDrawables.useSupportLibrary = true
     }
 

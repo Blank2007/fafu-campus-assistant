@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -25,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -300,7 +302,9 @@ fun ScheduleScreen() {
 
             item {
                 Text(
-                    "第${week}周（周日起算）· 点周次切换 · 点课程可编辑/删除",
+                    "第${week}周" +
+                        if (week == ScheduleStore.currentWeek(context)) "（当前周）" else "（当前为第${ScheduleStore.currentWeek(context)}周）" +
+                        "（周日起算）· 点周次切换 · 点课程可编辑/删除",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                 )
@@ -313,7 +317,7 @@ fun ScheduleScreen() {
                 )
             }
 
-            // ---- 周次芯片（S18 自动滚到当前周；S19 范围动态） ----
+            // ---- 周次芯片（选中周精确居中；当前周标注；S19 范围动态） ----
             item {
                 val curWeek = ScheduleStore.currentWeek(context)
                 val maxCourseWeek = courses.flatMap { it.weeks }.maxOrNull() ?: 1
@@ -321,13 +325,23 @@ fun ScheduleScreen() {
                 val maxWeek = maxOf(week, curWeek + 8, maxCourseWeek, 20)
                     .coerceAtMost(ScheduleStore.MAX_WEEK)
                 val chipState = rememberLazyListState()
-                LaunchedEffect(week) { chipState.scrollToItem((week - 1).coerceAtLeast(0)) }   // S18
+                // V4-6：选中周【居中】（不是顶到最左/最右）
+                LaunchedEffect(week, maxWeek) {
+                    chipState.scrollToItem((week - 1).coerceAtLeast(0))
+                    val info = chipState.layoutInfo
+                    val vp = info.viewportEndOffset - info.viewportStartOffset
+                    val item = info.visibleItemsInfo.find { it.index == week - 1 }
+                    if (vp > 0 && item != null) {
+                        val delta = (item.offset + item.size / 2f) - vp / 2f
+                        chipState.scrollBy(delta)          // 正=内容前滚(项左移)，负=后滚(项右移)
+                    }
+                }
                 LazyRow(state = chipState, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items((1..maxWeek).toList()) { w ->
                         FilterChip(
                             selected = week == w,
                             onClick = { week = w },
-                            label = { Text("第${w}周") },
+                            label = { Text(if (w == curWeek) "第${w}周·当前" else "第${w}周") },
                         )
                     }
                 }
@@ -337,12 +351,27 @@ fun ScheduleScreen() {
             item { Timetable(courses, week) { detailId = it.id } }
         }
 
-        ExtendedFloatingActionButton(
-            onClick = { showAdd = true },
-            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-            text = { Text("添加课程") },
+        Column(
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
-        )
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // V4-6：查看其他周时，可一键回到当前周
+            val curWeekNow = ScheduleStore.currentWeek(context)
+            if (week != curWeekNow) {
+                ExtendedFloatingActionButton(
+                    onClick = { week = curWeekNow },
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    icon = { Icon(Icons.Filled.DateRange, contentDescription = null) },
+                    text = { Text("回到当前周") },
+                )
+            }
+            ExtendedFloatingActionButton(
+                onClick = { showAdd = true },
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                text = { Text("添加课程") },
+            )
+        }
     }
 
     // ---- 详情（S13/S23） ----
