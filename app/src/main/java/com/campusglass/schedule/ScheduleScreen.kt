@@ -739,8 +739,13 @@ private fun HolidayBanner(week: Int) {
         ScheduleStore.dateOf(context, week, 7),
         ScheduleStore.dateOf(context, week, 6),
     )
+    val makeups = HolidayData.makeupInWeek(
+        ScheduleStore.dateOf(context, week, 7),
+        ScheduleStore.dateOf(context, week, 6),
+    )
     val today = LocalDate.now()
     val todayHoliday = HolidayData.holidays.firstOrNull { !today.isBefore(it.start) && !today.isAfter(it.end) }
+    val todayMakeup = HolidayData.makeupDays.firstOrNull { it.start == today }
     val dark = ThemePrefs.themeMode.value == ThemePrefs.ThemeMode.DARK ||
         (ThemePrefs.themeMode.value == ThemePrefs.ThemeMode.SYSTEM &&
             androidx.compose.foundation.isSystemInDarkTheme())
@@ -759,6 +764,21 @@ private fun HolidayBanner(week: Int) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface)
             } else if (hits.isEmpty()) {
+                if (makeups.isNotEmpty()) {
+                    Text(
+                        "⚠️ 本周调休上课：" + makeups.joinToString("、"),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                } else if (todayMakeup != null) {
+                    Text(
+                        "⚠️ 今天${todayMakeup.name.removePrefix("调休上课")}！",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
                 Text(
                     "本周无假期" + if (todayHoliday != null) " · 今天是【${todayHoliday.name}】🎉" else "",
                     style = MaterialTheme.typography.bodySmall,
@@ -772,7 +792,7 @@ private fun HolidayBanner(week: Int) {
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    "假期参考（以学校校历为准）" + if (todayHoliday != null) " · 今天【${todayHoliday.name}】🎉" else "",
+                    "假期/调休依据学校校历" + if (todayHoliday != null) " · 今天【${todayHoliday.name}】🎉" else "",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                 )

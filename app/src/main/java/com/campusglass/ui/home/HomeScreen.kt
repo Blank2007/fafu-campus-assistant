@@ -6,6 +6,9 @@ import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,10 +19,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -32,9 +39,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.campusglass.ui.glass.AcrylicCard
 import kotlinx.coroutines.launch
 
@@ -286,6 +296,74 @@ fun HomeScreen(onGoto: (String) -> Unit) {
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                         )
+
+                        HorizontalDivider()
+
+                        // 📅 本学期校历（依据学校校历原文提取）
+                        var showCalendar by remember { mutableStateOf(false) }
+                        Text("📅 本学期校历（2026-2027学年第一学期）",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold)
+                        listOf(
+                            "🏫 8/30 师生报到 · 8/31 老生开课",
+                            "🎓 9/5 新生报到 · 9/7 新生开课",
+                            "🌕 中秋 9/25-27 放假3天 · 🇨🇳 国庆 10/1-7 放假7天",
+                            "⚠️ 调休上课：9/20(日)上10/6(二)课 · 10/10(六)上10/7(三)课",
+                            "🎖 新生军训 10/26-11/8",
+                            "❄️ 寒假 2027/1/21-2/20（共31天）",
+                            "🧨 春节 2/6 · 🏮 元宵 2/20 · 元旦以国办通知为准",
+                        ).forEach { line ->
+                            Text(line, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Text("「时间安排若有调整另行通知」",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                        OutlinedButton(
+                            onClick = { showCalendar = true },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("🖼 查看校历原图") }
+
+                        if (showCalendar) {
+                            val bmp = remember {
+                                runCatching {
+                                    android.graphics.BitmapFactory.decodeStream(
+                                        context.assets.open("calendar_2026_2027_s1.jpg")
+                                    )
+                                }.getOrNull()
+                            }
+                            Dialog(onDismissRequest = { showCalendar = false }) {
+                                Surface(shape = RoundedCornerShape(14.dp)) {
+                                    Column(Modifier.padding(14.dp)) {
+                                        Text("📅 校历原图（2026-2027学年第一学期）",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold)
+                                        Spacer(Modifier.height(10.dp))
+                                        if (bmp != null) {
+                                            Box(
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .heightIn(max = 520.dp)
+                                                    .verticalScroll(rememberScrollState())
+                                            ) {
+                                                Image(
+                                                    bitmap = bmp.asImageBitmap(),
+                                                    contentDescription = "校历原图",
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    contentScale = ContentScale.FillWidth,
+                                                )
+                                            }
+                                        } else {
+                                            Text("原图加载失败 😥")
+                                        }
+                                        Spacer(Modifier.height(10.dp))
+                                        TextButton(
+                                            onClick = { showCalendar = false },
+                                            modifier = Modifier.align(Alignment.End),
+                                        ) { Text("关闭") }
+                                    }
+                                }
+                            }
+                        }
 
                         HorizontalDivider()
 

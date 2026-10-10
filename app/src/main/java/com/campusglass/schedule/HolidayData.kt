@@ -20,7 +20,20 @@ object HolidayData {
         Holiday("清明节", LocalDate.of(2027, 4, 3), LocalDate.of(2027, 4, 5)),
         Holiday("劳动节", LocalDate.of(2027, 5, 1), LocalDate.of(2027, 5, 5)),
         Holiday("端午节", LocalDate.of(2027, 6, 9), LocalDate.of(2027, 6, 11)),
+        Holiday("寒假", LocalDate.of(2027, 1, 21), LocalDate.of(2027, 2, 20)),   // 校历：共31天
     )
+
+    /** 调休上课日（依据 2026-2027 学年第一学期校历） */
+    val makeupDays = listOf(
+        Holiday("调休上课（周日上10月6日周二的课）", LocalDate.of(2026, 9, 20), LocalDate.of(2026, 9, 20)),
+        Holiday("调休上课（周六上10月7日周三的课）", LocalDate.of(2026, 10, 10), LocalDate.of(2026, 10, 10)),
+    )
+
+    /** 某周内的调休上课描述 */
+    fun makeupInWeek(weekStart: LocalDate, weekEnd: LocalDate): List<String> =
+        makeupDays.filter { it.overlaps(weekStart, weekEnd) }.map { h ->
+            "${h.start.monthValue}/${h.start.dayOfMonth} ${h.name}"
+        }
 
     /** 某周（周一~周日）内的假期描述，如 ["中秋节 9/25-9/27"] */
     fun holidaysInWeek(weekStart: LocalDate, weekEnd: LocalDate): List<String> =
