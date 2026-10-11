@@ -96,6 +96,11 @@ fun BusScreen() {
                         )
                         Text(route.fare, style = MaterialTheme.typography.bodySmall)
                         Text(
+                            "⚠️ 时刻表包含往返不同时刻（去/返程首末班与班次不同）",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        Text(
                             "点击查看时刻表与路线 →",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
@@ -141,6 +146,13 @@ fun BusScreen() {
                 ) {
                     Text(route.endpoints, style = MaterialTheme.typography.bodyMedium)
                     Text(route.fare, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "⚠️ 本时刻表包含往返（去程/返程）不同的发车时刻：" +
+                            "去程与返程的首末班、班次不同，请认准方向候车",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error,
+                    )
 
                     DirSection("🚏 去程", route.upSched)
                     route.downSched?.let { DirSection("🔄 返程", it) }
@@ -190,32 +202,20 @@ private fun DirSection(tag: String, sched: com.campusglass.bus.DirSchedule) {
         Text(sched.note, style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
     }
-    val times = BusData.departureTimes(sched)
-    if (times.isEmpty()) {
+    val fixed = sched.fixedTimes
+    if (fixed != null) {
         Text(
-            "该方向无公开固定时刻表，建议「掌上公交」看实时到站。",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-        )
-    } else {
-        Text(
-            when {
-                sched.fixedTimes != null -> "官方固定班次："
-                sched.timeOfficial && sched.peakIntervalMin != null -> "早高峰为官方时刻，其余按间隔推算："
-                sched.timeOfficial -> "官方运营时段："
-                else -> "按发车间隔推算（以站牌为准）："
-            },
+            "官方固定班次：",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
         )
-        TimeGrid(times)
-        if (BusData.lastIsStamped(sched, times)) {
-            Text(
-                "注：${times.last()} 为标称末班（总站发车，仅此时刻），与前一班间隔较短",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-            )
-        }
+        TimeGrid(fixed)
+    } else {
+        Text(
+            "具体发车时刻以站牌/「掌上公交」为准（去程与返程时刻不同）",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+        )
     }
 }
 
