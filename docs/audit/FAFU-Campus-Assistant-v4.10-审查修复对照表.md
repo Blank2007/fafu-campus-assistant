@@ -23,7 +23,7 @@
 | C-1 | 🟡 P2 | 导出的小部件接收器可被第三方触发 | ✅ onReceive 增加来源校验：自定义 extra 仅认自家 widget:// PendingIntent（fromSelf），系统广播走 action 白名单 | app/src/main/java/com/campusglass/widget/TodayWidgetProvider.kt | 27 |
 | C-2 | 🟡 P2 | targetSdk 37 过激 | ✅ targetSdk 37→36（compileSdk 保留 37） | app/build.gradle.kts | 16 |
 | C-3 | 🟡 P2 | APK 残留调试/无用产物 | ✅ packaging excludes：DebugProbesKt.bin、kotlin/**、META-INF 冗余；终检 APK 内容 CLEAN | app/build.gradle.kts | 36 |
-| C-4 | 🟡 P2 | 仓库含私人文件 zhy.txt/zhy.jpg | ✅ 已移出仓库 + 留底备份 + .gitignore 防护。⚠️ 历史记录清除（filter-repo+force push）属破坏性操作，待用户确认后执行 | .gitignore | 19 |
+| C-4 | 🟡 P2 | 仓库含私人文件 zhy.txt/zhy.jpg | ♻️ **撤销**：用户确认系有意放置（非误提交），文件已恢复回仓库，不需历史清除 | app/src/main/zhy.txt、app/src/main/zhy.jpg | — |
 | C-5 | 🟡 P2 | Release lint 检查关闭 | ✅ 采用报告备选方案：发布流程单独跑 :app:lintRelease 并归档报告（构建机两次实测 lintVital 与 R8 并行必挂）；已跑，结果仅 1 条 Hint | app/build.gradle.kts | 97；docs/audit/lint/lint-results-release-v4.11.html | — |
 | D-1 | 🟢 P3 | <queries> 声明重复两块 | ✅ 合并为单块（去重 AliPay/PDD 包名） | app/src/main/AndroidManifest.xml | 14 |
 | D-2 | 🟢 P3 | 无用 WebView keep 规则 | ✅ 移除并注释说明恢复条件 | app/proguard-rules.pro | 1 |
@@ -40,4 +40,5 @@
 | 隐私弹窗 | ✅ 首次启动强制（不可点外面关闭），同意后不再出现；关于页可随时查看 |
 | 更新链路 | ✅ 无校验信息时直接安装按钮拒绝执行；带 .sig 的发布方可闭环验签 |
 
-**合计**：16 项 —— 实修 11 项、按用户口径跳过 4 项（A-1/A-2/B-1/B-3）、1 项部分修复待确认（C-4 历史清除）。
+**合计**：16 项 —— 实修 10 项、按用户口径跳过 4 项（A-1/A-2/B-1/B-3）、撤销 2 项（C-4 用户确认有意保留；A-1 与跳过重叠不计）。
+**备注**：C-4 经用户确认后于 v4.11.sljzy 发布同日撤销，文件已恢复。
