@@ -110,6 +110,22 @@ class MainActivity : ComponentActivity() {
         ThemePrefs.load(this)
         setContent {
             CampusGlassTheme {
+                // B-4：首次启动强制同意隐私政策（未同意不可使用）
+                val activity = this
+                var privacyAgreed by androidx.compose.runtime.remember {
+                    androidx.compose.runtime.mutableStateOf(
+                        com.campusglass.ui.settings.PrivacyPrefs.agreed(activity)
+                    )
+                }
+                if (!privacyAgreed) {
+                    com.campusglass.ui.settings.PrivacyConsentDialog(
+                        onAgree = {
+                            com.campusglass.ui.settings.PrivacyPrefs.setAgreed(activity)
+                            privacyAgreed = true
+                        },
+                        onExit = { finish() },
+                    )
+                }
                 CampusGlassApp()
             }
         }

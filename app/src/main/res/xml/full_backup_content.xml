@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- D-3（审查 v4.10）：Android 11- 的备份规则（allowBackup=false 之上的显式声明） -->
+<full-backup-content>
+    <exclude domain="root" path="." />
+</full-backup-content>

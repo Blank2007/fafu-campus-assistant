@@ -21,15 +21,26 @@ import java.time.LocalDate
 class TodayWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        // 零点 / 开机 / 安装后 的补刷新
+        // C-1（审查 v4.10）：自定义 extra 仅接受自家 PendingIntent（data 为 widget:// 前缀），
+        // 防第三方应用显式广播触发状态切换 / 联网换句
         val data = intent.data?.toString()
-        if (data == "widget://midnight" || intent.action == Intent.ACTION_BOOT_COMPLETED) {
+        val fromSelf = data?.startsWith("widget://") == true
+        val sysAction = intent.action in setOf(
+            android.appwidget.AppWidgetManager.ACTION_APPWIDGET_UPDATE,
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_MY_PACKAGE_REPLACED,
+        )
+        if (!fromSelf && !sysAction) return
+        // 零点 / 开机 / 安装后 的补刷新
+        if (data == "widget://midnight" || intent.action == Intent.ACTION_BOOT_COMPLETED ||
+            intent.action == Intent.ACTION_MY_PACKAGE_REPLACED
+        ) {
             pushUpdate(context)
             scheduleMidnight(context)
             return
         }
         // 今/明切换
-        if (intent.getBooleanExtra("op_next", false)) {
+        if (fromSelf && intent.getBooleanExtra("op_next", false)) {
             val id = intent.getIntExtra("wid", -1)
             if (id >= 0) {
                 val prefs = context.getSharedPreferences("widget", Context.MODE_PRIVATE)
@@ -39,7 +50,7 @@ class TodayWidgetProvider : AppWidgetProvider() {
             return
         }
         // 换一句（W-3：单次拉取、短超时，不占满广播时限）
-        if (intent.getBooleanExtra("op_quote", false)) {
+        if (fromSelf && intent.getBooleanExtra("op_quote", false)) {
             val pr = goAsync()
             Thread {
                 runCatching {
@@ -51,8 +62,8 @@ class TodayWidgetProvider : AppWidgetProvider() {
             return
         }
         super.onReceive(context, intent)
-        // W-12：只有当天没拉过/拉到新句时才重绘
-        refreshQuoteAsync(context)
+        // W-12：只有当天没拉过/拉到新句时才重绘（仅系统广播触发）
+        if (sysAction) refreshQuoteAsync(context)
     }
 
     override fun onUpdate(context: Context, mgr: AppWidgetManager, appWidgetIds: IntArray) {

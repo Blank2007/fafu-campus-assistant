@@ -14,3 +14,7 @@ parked_out/
 keystore.properties
 *.jks
 *.keystore
+
+# C-4（审查 v4.10）：个人文件防护，防止再次误提交
+/zhy.*
+app/src/main/zhy.*

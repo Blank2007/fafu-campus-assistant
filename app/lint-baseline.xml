@@ -1,0 +1,1132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 9.4.1" type="baseline" client="gradle" dependencies="false" name="AGP (9.4.1)" variant="all" version="9.4.1">
+
+    <issue
+        id="OldTargetApi"
+        message="Not targeting the latest versions of Android; compatibility modes apply. Consider testing and updating this version. Consult the `android.os.Build.VERSION_CODES` javadoc for details."
+        errorLine1="        targetSdk = 36"
+        errorLine2="        ~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="16"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UnusedAttribute"
+        message="Attribute `enableOnBackInvokedCallback` is only used in API level 33 and higher (current min is 31)"
+        errorLine1="            android:enableOnBackInvokedCallback=&quot;true&quot;>"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="69"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="AndroidGradlePluginVersion"
+        message="A newer version of Gradle than 9.8.0 is available: 9.8.1"
+        errorLine1="distributionUrl=https\://services.gradle.org/distributions/gradle-9.8.0-bin.zip"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="$HOME/.openclaw/workspace/CampusGlass/gradle/wrapper/gradle-wrapper.properties"
+            line="3"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of dev.chrisbanes.haze:haze than 2.0.0 is available: 2.0.1"
+        errorLine1="    implementation(&quot;dev.chrisbanes.haze:haze:2.0.0&quot;)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="125"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of dev.chrisbanes.haze:haze-blur than 2.0.0 is available: 2.0.1"
+        errorLine1="    implementation(&quot;dev.chrisbanes.haze:haze-blur:2.0.0&quot;)"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="126"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="ChromeOsAbiSupport"
+        message="Missing x86_64 ABI support for ChromeOS"
+        errorLine1="            include(&quot;arm64-v8a&quot;)"
+        errorLine2="                    ~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="27"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="Unnecessary; `SDK_INT` is always >= 31"
+        errorLine1="        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/MainActivity.kt"
+            line="91"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="This folder configuration (`v26`) is unnecessary; `minSdkVersion` is 31. Merge all the resources in this folder into `mipmap-anydpi`.">
+        <location
+            file="src/main/res/mipmap-anydpi-v26"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="    val nonce = ThemePrefs.bgNonce.value"
+        errorLine2="                                   ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/MainActivity.kt"
+            line="305"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="private fun rowHeightDp(): Int = when (ThemePrefs.scheduleFontScale.value) {"
+        errorLine2="                                                                    ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/schedule/ScheduleScreen.kt"
+            line="75"
+            column="69"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="    val timeFont = if (ThemePrefs.scheduleFontScale.value == 2) 9 else 8   // S15"
+        errorLine2="                                                    ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/schedule/ScheduleScreen.kt"
+            line="590"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="    val scale = listOf(0.85f, 1f, 1.2f)[ThemePrefs.scheduleFontScale.value]"
+        errorLine2="                                                                     ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/schedule/ScheduleScreen.kt"
+            line="705"
+            column="70"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="                                selected = ThemePrefs.themeColorIndex.value == 0,"
+        errorLine2="                                                                      ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
+            line="290"
+            column="71"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="                                selected = ThemePrefs.themeColorIndex.value == i + 1,"
+        errorLine2="                                                                      ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
+            line="299"
+            column="71"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="                            Text(&quot;🎨 调色盘自定义&quot; + if (ThemePrefs.themeColorIndex.value == 8) &quot;（当前生效）&quot; else &quot;&quot;)"
+        errorLine2="                                                                              ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
+            line="305"
+            column="79"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="                                selected = ThemePrefs.scheduleFontScale.value == i,"
+        errorLine2="                                                                        ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
+            line="321"
+            column="73"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="    var styleState by remember { mutableIntStateOf(ThemePrefs.colorStyle.value) }"
+        errorLine2="                                                                         ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
+            line="533"
+            column="74"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `floatValue` to avoid unnecessary allocations."
+        errorLine1="    var tempState by remember { mutableFloatStateOf(ThemePrefs.colorTemp.value) }"
+        errorLine2="                                                                         ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
+            line="534"
+            column="74"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="    val idx = ThemePrefs.themeColorIndex.value"
+        errorLine2="                                         ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/Theme.kt"
+            line="106"
+            column="42"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="    style: Int = ThemePrefs.colorStyle.value,"
+        errorLine2="                                       ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/Theme.kt"
+            line="153"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `floatValue` to avoid unnecessary allocations."
+        errorLine1="    temp: Float = ThemePrefs.colorTemp.value,"
+        errorLine2="                                       ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/Theme.kt"
+            line="154"
+            column="40"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Assigning `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="        themeColorIndex.value = p.getInt(&quot;colorIdx&quot;, 0).coerceIn(0, 8)"
+        errorLine2="                        ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="54"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Assigning `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="        colorStyle.value = p.getInt(&quot;colorStyle&quot;, 0).coerceIn(0, 2)"
+        errorLine2="                   ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="56"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Assigning `value` will cause an autoboxing operation. Use `floatValue` to avoid unnecessary allocations."
+        errorLine1="        colorTemp.value = p.getFloat(&quot;colorTemp&quot;, 0f).coerceIn(-20f, 20f)"
+        errorLine2="                  ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="57"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Assigning `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="        scheduleFontScale.value = p.getInt(&quot;fontScale&quot;, 1).coerceIn(0, 2)"
+        errorLine2="                          ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="62"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Assigning `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="        themeColorIndex.value = idx.coerceIn(0, 8)"
+        errorLine2="                        ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="77"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="        prefs(c).edit().putInt(&quot;colorIdx&quot;, themeColorIndex.value).apply()"
+        errorLine2="                                                           ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="78"
+            column="60"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Assigning `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="        themeColorIndex.value = 8"
+        errorLine2="                        ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="83"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Assigning `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="        bgNonce.value = bgNonce.value + 1"
+        errorLine2="                ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="92"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="        bgNonce.value = bgNonce.value + 1"
+        errorLine2="                                ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="92"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Assigning `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="        bgNonce.value = bgNonce.value + 1"
+        errorLine2="                ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="98"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="        bgNonce.value = bgNonce.value + 1"
+        errorLine2="                                ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="98"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Assigning `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="        scheduleFontScale.value = v.coerceIn(0, 2)"
+        errorLine2="                          ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="103"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="        prefs(c).edit().putInt(&quot;fontScale&quot;, scheduleFontScale.value).apply()"
+        errorLine2="                                                              ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="104"
+            column="63"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Assigning `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="        colorStyle.value = v.coerceIn(0, 2)"
+        errorLine2="                   ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="108"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `intValue` to avoid unnecessary allocations."
+        errorLine1="        prefs(c).edit().putInt(&quot;colorStyle&quot;, colorStyle.value).apply()"
+        errorLine2="                                                        ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="109"
+            column="57"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Assigning `value` will cause an autoboxing operation. Use `floatValue` to avoid unnecessary allocations."
+        errorLine1="        colorTemp.value = v.coerceIn(-20f, 20f)"
+        errorLine2="                  ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="113"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="AutoboxingStateValueProperty"
+        message="Reading `value` will cause an autoboxing operation. Use `floatValue` to avoid unnecessary allocations."
+        errorLine1="        prefs(c).edit().putFloat(&quot;colorTemp&quot;, colorTemp.value).apply()"
+        errorLine2="                                                        ~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="114"
+            column="57"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.drawable.ic_launcher` appears to be unused"
+        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
+        errorLine2="^">
+        <location
+            file="src/main/res/drawable/ic_launcher.xml"
+            line="2"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="IconXmlAndPng"
+        message="The following images appear both as density independent `.xml` files and as bitmap files: src/main/res/drawable/ic_launcher.xml, src/main/res/mipmap-hdpi/ic_launcher.png">
+        <location
+            file="src/main/res/mipmap-xxxhdpi/ic_launcher.png"/>
+        <location
+            file="src/main/res/mipmap-xxhdpi/ic_launcher.png"/>
+        <location
+            file="src/main/res/mipmap-xhdpi/ic_launcher.png"/>
+        <location
+            file="src/main/res/mipmap-mdpi/ic_launcher.png"/>
+        <location
+            file="src/main/res/mipmap-hdpi/ic_launcher.png"/>
+        <location
+            file="src/main/res/mipmap-anydpi-v26/ic_launcher.xml"/>
+        <location
+            file="src/main/res/drawable/ic_launcher.xml"/>
+    </issue>
+
+    <issue
+        id="IconLauncherShape"
+        message="Launcher icon used as round icon did not have a circular shape">
+        <location
+            file="src/main/res/mipmap-hdpi/ic_launcher_round.png"/>
+    </issue>
+
+    <issue
+        id="IconLauncherShape"
+        message="Launcher icon used as round icon did not have a circular shape">
+        <location
+            file="src/main/res/mipmap-mdpi/ic_launcher_round.png"/>
+    </issue>
+
+    <issue
+        id="IconLauncherShape"
+        message="Launcher icon used as round icon did not have a circular shape">
+        <location
+            file="src/main/res/mipmap-xhdpi/ic_launcher_round.png"/>
+    </issue>
+
+    <issue
+        id="IconLauncherShape"
+        message="Launcher icon used as round icon did not have a circular shape">
+        <location
+            file="src/main/res/mipmap-xxhdpi/ic_launcher_round.png"/>
+    </issue>
+
+    <issue
+        id="IconLauncherShape"
+        message="Launcher icon used as round icon did not have a circular shape">
+        <location
+            file="src/main/res/mipmap-xxxhdpi/ic_launcher_round.png"/>
+    </issue>
+
+    <issue
+        id="MonochromeLauncherIcon"
+        message="The application adaptive icon is missing a monochrome tag"
+        errorLine1="&lt;adaptive-icon xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;>"
+        errorLine2="^">
+        <location
+            file="src/main/res/mipmap-anydpi-v26/ic_launcher.xml"
+            line="2"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="MonochromeLauncherIcon"
+        message="The application adaptive roundIcon is missing a monochrome tag"
+        errorLine1="&lt;adaptive-icon xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;>"
+        errorLine2="^">
+        <location
+            file="src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml"
+            line="2"
+            column="1"/>
+    </issue>
+
+    <issue
+        id="IconLocation"
+        message="Found bitmap drawable `res/drawable/github_avatar.png` in densityless folder">
+        <location
+            file="src/main/res/drawable/github_avatar.png"/>
+    </issue>
+
+    <issue
+        id="IconLocation"
+        message="Found bitmap drawable `res/drawable/ic_launcher_background.png` in densityless folder">
+        <location
+            file="src/main/res/drawable/ic_launcher_background.png"/>
+    </issue>
+
+    <issue
+        id="IconLocation"
+        message="Found bitmap drawable `res/drawable/ic_launcher_foreground.png` in densityless folder">
+        <location
+            file="src/main/res/drawable/ic_launcher_foreground.png"/>
+    </issue>
+
+    <issue
+        id="IconDuplicates"
+        message="The following unrelated icon files have identical contents: ic_launcher.png, ic_launcher_round.png">
+        <location
+            file="src/main/res/mipmap-hdpi/ic_launcher_round.png"/>
+        <location
+            file="src/main/res/mipmap-hdpi/ic_launcher.png"/>
+    </issue>
+
+    <issue
+        id="IconDuplicates"
+        message="The following unrelated icon files have identical contents: ic_launcher.png, ic_launcher_round.png">
+        <location
+            file="src/main/res/mipmap-mdpi/ic_launcher_round.png"/>
+        <location
+            file="src/main/res/mipmap-mdpi/ic_launcher.png"/>
+    </issue>
+
+    <issue
+        id="IconDuplicates"
+        message="The following unrelated icon files have identical contents: ic_launcher.png, ic_launcher_round.png">
+        <location
+            file="src/main/res/mipmap-xhdpi/ic_launcher_round.png"/>
+        <location
+            file="src/main/res/mipmap-xhdpi/ic_launcher.png"/>
+    </issue>
+
+    <issue
+        id="IconDuplicates"
+        message="The following unrelated icon files have identical contents: ic_launcher.png, ic_launcher_round.png">
+        <location
+            file="src/main/res/mipmap-xxhdpi/ic_launcher_round.png"/>
+        <location
+            file="src/main/res/mipmap-xxhdpi/ic_launcher.png"/>
+    </issue>
+
+    <issue
+        id="IconDuplicates"
+        message="The following unrelated icon files have identical contents: ic_launcher.png, ic_launcher_round.png">
+        <location
+            file="src/main/res/mipmap-xxxhdpi/ic_launcher_round.png"/>
+        <location
+            file="src/main/res/mipmap-xxxhdpi/ic_launcher.png"/>
+    </issue>
+
+    <issue
+        id="SmallSp"
+        message="Avoid using sizes smaller than `11sp`: `10sp`"
+        errorLine1="            android:textSize=&quot;10sp&quot; />"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/widget_row.xml"
+            line="41"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="SmallSp"
+        message="Avoid using sizes smaller than `11sp`: `9sp`"
+        errorLine1="            android:textSize=&quot;9sp&quot; />"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/widget_row.xml"
+            line="48"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="SmallSp"
+        message="Avoid using sizes smaller than `11sp`: `9sp`"
+        errorLine1="            android:textSize=&quot;9sp&quot; />"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/widget_today.xml"
+            line="35"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="SmallSp"
+        message="Avoid using sizes smaller than `11sp`: `9sp`"
+        errorLine1="        android:textSize=&quot;9sp&quot; />"
+        errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/widget_today.xml"
+            line="77"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                Intent(Intent.ACTION_VIEW, Uri.parse(&quot;market://details?id=$pkg&quot;))"
+        errorLine2="                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/pickup/AppJump.kt"
+            line="38"
+            column="44"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                    Intent(Intent.ACTION_VIEW, Uri.parse(uri))"
+        errorLine2="                                               ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/pickup/AppJump.kt"
+            line="50"
+            column="48"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                    Intent(Intent.ACTION_VIEW, Uri.parse(uri))"
+        errorLine2="                                               ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/pickup/AppJump.kt"
+            line="58"
+            column="48"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/home/Hitokoto.kt"
+            line="20"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(uri))"
+        errorLine2="                                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/home/HomeScreen.kt"
+            line="91"
+            column="76"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                                            Intent(Intent.ACTION_VIEW, Uri.parse(&quot;https://m.fafu.edu.cn/&quot;))"
+        errorLine2="                                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/home/HomeScreen.kt"
+            line="259"
+            column="72"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                                        Intent(Intent.ACTION_VIEW, Uri.parse(&quot;https://m.fafu.edu.cn/&quot;))"
+        errorLine2="                                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/home/HomeScreen.kt"
+            line="271"
+            column="68"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))"
+        errorLine2="                                                                                         ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/home/HomeScreen.kt"
+            line="431"
+            column="90"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="                prefs.edit().putString(&quot;history2&quot;, old.joinToString(&quot;\n&quot;)).remove(&quot;history&quot;).apply()"
+        errorLine2="                ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/pickup/PickupScreen.kt"
+            line="75"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs.edit().putString(&quot;history2&quot;, list.joinToString(&quot;\n&quot;)).apply()   // E1"
+        errorLine2="        ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/pickup/PickupScreen.kt"
+            line="83"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                                        android.net.Uri.parse(uri))"
+        errorLine2="                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/pickup/PickupScreen.kt"
+            line="303"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)"
+        errorLine2="        ^">
+        <location
+            file="src/main/java/com/campusglass/ui/settings/PrivacyPolicy.kt"
+            line="39"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="            context.getSharedPreferences(&quot;schedule&quot;, android.content.Context.MODE_PRIVATE)"
+        errorLine2="            ^">
+        <location
+            file="src/main/java/com/campusglass/schedule/ScheduleScreen.kt"
+            line="141"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/schedule/ScheduleStore.kt"
+            line="81"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/schedule/ScheduleStore.kt"
+            line="90"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit().putInt(&quot;periodsPerDay&quot;, n.coerceIn(1, MAX_PERIODS)).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/schedule/ScheduleStore.kt"
+            line="107"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit().putString(&quot;courses&quot;, &quot;[]&quot;).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/schedule/ScheduleStore.kt"
+            line="141"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="            p.edit().putString(&quot;courses_corrupt_backup&quot;, raw).apply()"
+        errorLine2="            ~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/schedule/ScheduleStore.kt"
+            line="156"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="            p.edit().putString(&quot;courses_corrupt_backup&quot;, raw).apply()"
+        errorLine2="            ~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/schedule/ScheduleStore.kt"
+            line="178"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit().putString(&quot;courses&quot;, arr.toString())"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/schedule/ScheduleStore.kt"
+            line="202"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="            if (current != raw) p.edit().putString(&quot;courses_corrupt_backup&quot;, current).apply()"
+        errorLine2="                                ~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/schedule/ScheduleStore.kt"
+            line="230"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        p.edit().putString(&quot;courses&quot;, raw)"
+        errorLine2="        ~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/schedule/ScheduleStore.kt"
+            line="233"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit().putString(&quot;termStart&quot;, d.format(DATE_FMT)).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/schedule/ScheduleStore.kt"
+            line="293"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                                            Intent(Intent.ACTION_VIEW, Uri.parse(&quot;https://github.com/Blank2007&quot;))"
+        errorLine2="                                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
+            line="366"
+            column="72"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(c.url)))"
+        errorLine2="                                                                             ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
+            line="489"
+            column="78"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="                            prefs.edit().remove(&quot;ready_path&quot;).apply()"
+        errorLine2="                            ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
+            line="914"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                                                android.net.Uri.parse(&quot;package:&quot; + context.packageName),"
+        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
+            line="930"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="                                        prefs.edit().putString(&quot;ready_path&quot;, apk.absolutePath).apply()   // U5"
+        errorLine2="                                        ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
+            line="1021"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                                            Uri.parse(&quot;https://github.com/Blank2007/fafu-campus-assistant/releases&quot;),"
+        errorLine2="                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
+            line="1035"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit().putString(&quot;themeMode&quot;, m.name).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="68"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit().putBoolean(&quot;acrylic&quot;, on).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="73"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit().putInt(&quot;colorIdx&quot;, themeColorIndex.value).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="78"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="84"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit().putString(&quot;bgImage&quot;, path).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="93"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit().putString(&quot;bgCrop&quot;, crop.name).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="99"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit().putInt(&quot;fontScale&quot;, scheduleFontScale.value).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="104"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit().putInt(&quot;colorStyle&quot;, colorStyle.value).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="109"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit().putFloat(&quot;colorTemp&quot;, colorTemp.value).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="114"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit().putBoolean(&quot;showWeekend&quot;, on).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
+            line="119"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="                prefs.edit().putInt(&quot;off_$id&quot;, if (prefs.getInt(&quot;off_$id&quot;, 0) == 0) 1 else 0).apply()"
+        errorLine2="                ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/widget/TodayWidgetProvider.kt"
+            line="47"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        val editor = prefs.edit()"
+        errorLine2="                     ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/widget/TodayWidgetProvider.kt"
+            line="80"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                        .setData(Uri.parse(&quot;widget://midnight&quot;)),"
+        errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/widget/TodayWidgetProvider.kt"
+            line="93"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                        .setData(Uri.parse(&quot;widget://midnight&quot;)),"
+        errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/widget/TodayWidgetProvider.kt"
+            line="138"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                        .setData(Uri.parse(&quot;widget://$role/$id&quot;))"
+        errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/widget/TodayWidgetProvider.kt"
+            line="202"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="                context.getSharedPreferences(&quot;update&quot;, Context.MODE_PRIVATE)"
+        errorLine2="                ^">
+        <location
+            file="src/main/java/com/campusglass/UpdateCleanupReceiver.kt"
+            line="18"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="HardcodedText"
+        message="Hardcoded string &quot;今日无课&quot;, should use `@string` resource"
+        errorLine1="    android:text=&quot;今日无课&quot;"
+        errorLine2="    ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/widget_empty_row.xml"
+            line="7"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="HardcodedText"
+        message="Hardcoded string &quot;➡️&quot;, should use `@string` resource"
+        errorLine1="            android:text=&quot;➡️&quot;"
+        errorLine2="            ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/layout/widget_today.xml"
+            line="43"
+            column="13"/>
+    </issue>
+
+</issues>

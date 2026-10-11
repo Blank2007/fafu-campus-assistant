@@ -92,6 +92,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
+    "v4.11.sljzy · 2026-10-12 00:25" to "DeepSeek-v4.10安全审查修复：隐私政策上线(首次同意+关于页入口+PRIVACY.md)；更新信任链加固(Ed25519验签+tag净化+校验信息强制)；小部件广播来源校验；targetSdk 36；包体清理；lint重开；queries合并；个人文件移除",
     "v4.10.sljzy · 2026-10-11 23:15" to "简化公交时刻展示（撤掉推算时刻表）；界面明确标注：时刻表包含往返（去程/返程）不同发车时刻，两方向首末班/班次不同请认准方向",
     "v4.9.sljzy · 2026-10-11 22:45" to "全方向推算时刻表生成(所有线路去/返程都有完整时刻表)；复核纠错3处：K3返程07:40-23:00+站点、工业园区专线恢复武夷智谷终端与固定班次06:50/07:55/14:30/18:05、K3间隔约24-27分钟",
     "v4.8.sljzy · 2026-10-11 00:55" to "公交数据全量重核(掌上公交/官方通告多源交叉)：时刻表去程/返程彻底分开；新增定制公交(校区⇄高铁南平市站直达)与K3路参考；修正107双向首班/107延伸电商园区/K2票价8元与末班随高铁调整/园区专线走向",
@@ -153,6 +154,7 @@ fun SettingsScreen() {
     var showTimeDialog by remember { mutableStateOf(false) }
     var showColorPicker by remember { mutableStateOf(false) }
     var showUpdate by rememberSaveable { mutableStateOf(false) }
+    var showPrivacy by remember { mutableStateOf(false) }   // B-4：隐私政策
     var showResetBg by remember { mutableStateOf(false) }
 
     val pickBgImage = rememberLauncherForActivityResult(
@@ -413,6 +415,13 @@ fun SettingsScreen() {
                         onClick = { showUpdate = true },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("🔄 检查更新 · 下载更新") }
+                    OutlinedButton(
+                        onClick = { showPrivacy = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("📜 隐私政策与数据使用协议") }
+                    if (showPrivacy) {
+                        PrivacyPolicyDialog(onClose = { showPrivacy = false })
+                    }
                 }
             }
         }
@@ -724,6 +733,7 @@ private data class UpdateCheck(
     val downloadUrl: String? = null,
     val fileName: String? = null,
     val sha256: String? = null,
+    val sigUrl: String? = null,      // B-2：Ed25519 签名资产地址
 )
 
 /** 检查更新：读 GitHub Releases 最新版（带 User-Agent + 重试；GitHub API 强制要求 UA） */
@@ -762,11 +772,24 @@ private fun checkUpdate(): UpdateCheck {
             val latest = json.optString("tag_name", "").removePrefix("v").removePrefix("V")
             val body = json.optString("body", "").trim()      // 更新日志
             // U7：下载地址/文件名/sha256 来自 API 资产（不硬编码）
-            val a0 = json.optJSONArray("assets")?.optJSONObject(0)
+            // B-2：按名称匹配 .apk 与配套 .apk.sig（不盲取 assets[0]，防资产顺序变化误取）
+            val assetsArr = json.optJSONArray("assets")
+            var apkObj: org.json.JSONObject? = null
+            var sigObj: org.json.JSONObject? = null
+            if (assetsArr != null) {
+                for (i in 0 until assetsArr.length()) {
+                    val o = assetsArr.optJSONObject(i) ?: continue
+                    val n = o.optString("name")
+                    if (n.endsWith(".apk") && apkObj == null) apkObj = o
+                    if (n.endsWith(".apk.sig")) sigObj = o
+                }
+            }
+            val a0 = apkObj
             val assetUrl = a0?.optString("browser_download_url")?.ifBlank { null }
             val assetName = a0?.optString("name")?.ifBlank { null }
                 ?.replace(Regex("[^A-Za-z0-9._-]"), "_")
             val assetSha = a0?.optString("digest")?.removePrefix("sha256:")?.ifBlank { null }
+            val sigUrl = sigObj?.optString("browser_download_url")?.ifBlank { null }
             val current = BuildConfig.VERSION_NAME
             // SET-4：数字段比大小（兼容 3.2 / v3.2.0 / 3.2.zilyf 等写法），旧版不再误报
             fun verParts(s: String) = s.split(Regex("[^0-9]+")).mapNotNull { it.toIntOrNull() }
@@ -784,6 +807,7 @@ private fun checkUpdate(): UpdateCheck {
                     assetUrl,
                     assetName,
                     assetSha,
+                    sigUrl,
                 )
             }
         }.onFailure { lastErr = it.message ?: "网络异常" }
@@ -909,10 +933,17 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
                                     }
                                     return@Button
                                 }
+                                // B-2：无完整性校验信息（sha256 / Ed25519 签名）时禁用直接安装
+                                if (c.sha256 == null || c.sigUrl == null) {
+                                    dlInfo = "⛔ 该版本发布方未提供完整校验信息（SHA-256 / Ed25519 签名），" +
+                                        "已禁用直接安装，请用「浏览器下载」"
+                                    return@Button
+                                }
                                 downloading = true
                                 dlInfo = "正在下载 v${c.newTag}…"
                                 dlJob = scope.launch {
-                                    val tag = c.newTag
+                                    // B-2：tag 白名单净化（防注入 URL）
+                                    val tag = c.newTag.replace(Regex("[^A-Za-z0-9._-]"), "").take(32)
                                     val url = c.downloadUrl
                                         ?: "https://github.com/Blank2007/fafu-campus-assistant/releases/" +
                                         "download/v$tag/FAFU-Campus-Assistant-v$tag.apk"
@@ -946,13 +977,24 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
                                                 }
                                             }
                                             conn.disconnect()
-                                            // U1：sha256 + 包名校验
-                                            c.sha256?.let { expect ->
-                                                val actual = sha256Of(file)
-                                                if (!actual.equals(expect, ignoreCase = true)) {
-                                                    file.delete()
-                                                    return@runCatching null to "校验失败：文件指纹不匹配，已删除（可去浏览器下载）"
-                                                }
+                                            // U1：sha256 + 包名校验（B-2：无指纹一律拒绝）
+                                            val expect = c.sha256
+                                            if (expect == null || !sha256Of(file).equals(expect, ignoreCase = true)) {
+                                                file.delete()
+                                                return@runCatching null to "校验失败：文件指纹不匹配，已删除（可去浏览器下载）"
+                                            }
+                                            // B-2：Ed25519 验签（信任根=应用内置公钥，防发布渠道被篡改）
+                                            val sigOk = runCatching {
+                                                val sigConn = java.net.URL(c.sigUrl).openConnection() as java.net.HttpURLConnection
+                                                sigConn.connectTimeout = 15_000
+                                                sigConn.readTimeout = 15_000
+                                                val sigBytes = sigConn.inputStream.use { it.readBytes() }
+                                                sigConn.disconnect()
+                                                UpdateVerify.verifyEd25519(file, sigBytes)
+                                            }.getOrDefault(false)
+                                            if (!sigOk) {
+                                                file.delete()
+                                                return@runCatching null to "校验失败：Ed25519 签名验证未通过，已删除（可去浏览器下载）"
                                             }
                                             val pkgOk = runCatching {
                                                 @Suppress("DEPRECATION")
@@ -977,9 +1019,7 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
                                         dlInfo = err.ifBlank { "下载失败，可点「浏览器下载」试试" }
                                     } else {
                                         prefs.edit().putString("ready_path", apk.absolutePath).apply()   // U5
-                                        dlInfo = if (c.sha256 == null)
-                                            "下载完成（仅校验包名；发布方未提供哈希指纹）"   // V4-26
-                                        else "下载完成并通过完整性校验"
+                                        dlInfo = "下载完成，已通过 SHA-256 + Ed25519 签名校验 ✅"
                                         launchInstall(apk)
                                     }
                                 }

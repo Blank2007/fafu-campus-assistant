@@ -11,10 +11,11 @@ android {
 
     defaultConfig {
         // 目标环境 Android 15+（HyperOS 4 / Android 17 优先适配），minSdk 31 兼容更广
+        // C-2（审查 v4.10）：targetSdk 收敛到 36（API 37 编译环境非 REL，行为变更未经真机回归）
         minSdk = 31
-        targetSdk = 37
-        versionCode = 74
-        versionName = "4.10.sljzy"
+        targetSdk = 36
+        versionCode = 75
+        versionName = "4.11.sljzy"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -29,6 +30,16 @@ android {
     }
     packaging {
         jniLibs.useLegacyPackaging = false
+        // C-3（审查 v4.10）：排除调试/无用产物，保持轻量
+        resources {
+            excludes += setOf(
+                "DebugProbesKt.bin",          // kotlinx-coroutines 调试探针，Release 不需要
+                "META-INF/*.version",
+                "kotlin/**",                  // Kotlin builtins 元数据（未用反射）
+                "META-INF/services/m5",
+                "META-INF/services/tp",
+            )
+        }
     }
 
     // U2 正式签名：在项目根放 keystore.properties（勿提交！已 gitignore）：
@@ -78,9 +89,12 @@ android {
         buildConfig = true   // 关于页动态显示版本号用
     }
     lint {
-        // 小内存构建机上 lintVital 会和 R8 抢内存导致守护进程 OOM，关闭发布前检查
+        // C-5（审查 v4.10）：构建机内存有限，lintVital 与 R8 并行会挂（两次实测），
+        // 采用报告备选方案：assembleRelease 不内嵌 lint，改为发布流程单独跑
+        // :app:lintRelease 并把报告归档进 docs/audit/（发布 checklist 已固化）。
         checkReleaseBuilds = false
         abortOnError = false
+        baseline = file("lint-baseline.xml")
     }
 }
 
