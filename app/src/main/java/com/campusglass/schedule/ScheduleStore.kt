@@ -316,11 +316,9 @@ object ScheduleStore {
         termStart(c).plusDays(((week - 1) * 7 + (weekday % 7)).toLong())
     }.getOrDefault(termStart(c))
 
-    /** 星期（1=周一 … 7=周日；周日为一周起点） */
-    fun weekdayOf(date: LocalDate): Int {
-        val iso = date.dayOfWeek.value          // 1=Mon..7=Sun
-        return if (iso == 7) 7 else iso
-    }
+    /** 星期（1=周一 … 7=周日；周日为一周起点）。
+     *  ISO 的 dayOfWeek.value 恰好就是 1=周一…7=周日，与本项目约定一致，直接返回 */
+    fun weekdayOf(date: LocalDate): Int = date.dayOfWeek.value
 }
 
 /**
@@ -360,9 +358,7 @@ object ScheduleShare {
         val idx = text.indexOf(PREFIX)
         if (idx < 0) return null
         // V4-9：聊天软件折行/插空格 → 全部剥掉再解码
-        var code = text.substring(idx + PREFIX.length)
-            .replace(Regex("\\s"), "")
-            .split(Regex("\\s")).firstOrNull().orEmpty()
+        var code = text.substring(idx + PREFIX.length).replace(Regex("\\s"), "")
         if (code.isBlank() || code.length > MAX_CODE_LEN) return null        // SH1
         while (code.length % 4 != 0) code += "="                             // SH8：聊天软件吞 padding
 

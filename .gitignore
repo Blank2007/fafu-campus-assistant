@@ -15,3 +15,10 @@ keystore.properties
 *.jks
 *.keystore
 
+# 交接密钥与凭据（绝不入库）
+update_signing.key
+update_signing.pub
+tok.txt
+.handover-secrets/
+.toolchain/
+

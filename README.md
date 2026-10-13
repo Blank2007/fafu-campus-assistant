@@ -2,7 +2,9 @@
 
 > 🗓 **本项目全程在 AI 助手的每日 3 小时免费时长内完成开发**（需求 → 设计 → 开发 → 多轮迭代 → 开源发布，均为这 3 小时内对话完成）
 >
-> 全部代码由 AI 助手（Mimo v2.6-Pro / OpenClaw 编程助手）独立编写，需求设计、提示词（Prompt）与测试反馈由 **Void_Blank** 提供。目前bug较多，抱歉。
+> 全部代码由 AI 助手独立编写，需求设计、提示词（Prompt）与测试反馈由 **Void_Blank** 提供。目前bug较多，抱歉。
+>
+> **代码编写分工**：**v1.0 ~ v4.12** 由 **Xiaomi-Mimo-V2.6-Pro**（Mimo v2.6-Pro / OpenClaw 编程助手）完成；**v4.13 起**由 **WorkBuddy AI** 接棒维护。前手的架构设计与逐行实现是后续一切迭代的基础，谨此致谢。
 
 **系统要求**：Android 15+（兼容 Android 12~17，优先适配小米澎湃 OS 4）· 安装包约 3 MB 
 
@@ -17,21 +19,30 @@
 
 ## 📱 安装
 
-到 [Releases](https://github.com/Blank2007/fafu-campus-assistant/releases) 下载最新 `校园助手-FAFUer专用-vX.X.apk`，允许"未知来源"安装即可。
+到 [Releases](https://github.com/Blank2007/fafu-campus-assistant/releases) 下载最新 `FAFU-Campus-Assistant-vX.Y.sljzy.apk`，允许"未知来源"安装即可。
 
 ## 🛠 从源码构建
 
+**前置要求**：JDK 21 · Android SDK `platforms;android-37.0` + `build-tools;37.0.0` · Gradle 9.8.0
+
 ```bash
 # Android Studio 打开本目录，或命令行：
-./gradlew :app:assembleRelease
-# 产物：app/build/outputs/apk/release/app-arm64-v8a-release.apk
+./gradlew :app:assembleRelease   # 产物：app/build/outputs/apk/release/app-arm64-v8a-release.apk
+./gradlew :app:test              # 纯逻辑单元测试（ScheduleLogicTest）
 ```
 
-技术栈：Kotlin · Jetpack Compose (Material 3) · AGP 9 · targetSdk 37
+- `local.properties` 需指向本机 SDK：`sdk.dir=/你的/Android/sdk`
+- ⚠️ API 37 采用**小版本命名**：平台包是 `platforms;android-37.0`，安装目录为 `platforms/android-37.0`（不是 `android-37`）
+- `build-apk.sh` 是等价的一键脚本（自动探测工具链）：`bash build-apk.sh`
+- 发版需额外生成 Ed25519 签名资产 `.apk.sig`，否则 App 内「直接下载安装」会被拒绝（见 [CHANGELOG.md](CHANGELOG.md) 与发布流程说明）
+
+技术栈：Kotlin · Jetpack Compose (Material 3) · AGP 9 · compileSdk 37 / targetSdk 36 / minSdk 31
 
 ## ✍️ 作者与代码归属
 
-- **代码编写**：AI 助手（Mimo v2.6-Pro / OpenClaw 编程助手）—— 从架构设计到每一行代码全部由 AI 独立完成
+- **代码编写**：AI 助手 —— 从架构设计到每一行代码全部由 AI 独立完成
+  - **Xiaomi-Mimo-V2.6-Pro**（Mimo v2.6-Pro / OpenClaw 编程助手）：v1.0 ~ v4.12，完成项目从零到 v4.12 的全部实现与多轮审查修复
+  - **WorkBuddy AI**：v4.13 起接棒维护
 - **需求与提示词**：[Void_Blank](https://github.com/Blank2007) —— 功能构想、界面意见、逐轮测试反馈
 - 简单说：**人出想法，AI 写代码**
 

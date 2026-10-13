@@ -3,7 +3,9 @@
 
     <!-- 教务系统抓取课表需要网络 -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- 读取应用列表：用于检测淘宝/京东等购物平台是否安装（小米等 ROM 在权限管理里可控制） -->
+    <!-- 说明（v4.13 修正）：此处原有一条"读取应用列表：用于检测淘宝/京东等购物平台是否安装"的注释，
+         但项目从未实现淘宝/京东跳转，也从未声明 QUERY_ALL_PACKAGES，属陈旧注释，已移除。
+         当前实际需要"包可见性"的只有下面 <queries> 里的拼多多 / 支付宝 / 菜鸟 / 微信 / 数字FAFU。 -->
 
     <!-- 检查更新直接下载安装 APK -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />

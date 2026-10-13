@@ -43,15 +43,13 @@ object Hitokoto {
         return q
     }
 
-    /** 强制换一句（小部件点击/首页每次打开）；后台线程调用。连拉最多 3 次确保不是同一句 */
+    /** 强制换一句（小部件点击/首页每次打开）；后台线程调用。
+     *  单次拉取即可拿到新句——请求带时间戳 `_=` 破接口缓存；拉不到则退回上一条 */
     fun fetchNew(c: Context): Quote? {
         val q = fetch() ?: return cached(c)     // W-3：单次拉取；拉不到用之前一条
         save(c, q)
         return q
     }
-
-    /** 每次打开 App 拉一句新的（首页）；后台线程调用 */
-    fun fetchFresh(c: Context): Quote? = fetchNew(c)
 
     /** 诗词 + 文学分类；时间戳破接口缓存（同一请求会返回同一句） */
     private fun fetch(): Quote? = runCatching {

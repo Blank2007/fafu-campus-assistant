@@ -312,41 +312,7 @@ object BusData {
         ),
     )
 
-    /** 发车时刻点列表（固定班次直接用；否则按首末班+间隔生成；未公开返回空） */
-    fun departureTimes(sched: DirSchedule): List<String> {
-        sched.fixedTimes?.let { return it }
-        val step = sched.offPeakIntervalMin ?: return emptyList()
-        val first = toMin(sched.first)
-        val last = toMin(sched.last)
-        if (first < 0 || last <= first) return emptyList()
-        val peakStart = sched.peakFrom?.let { toMin(it) }
-        val peakEnd = sched.peakTo?.let { toMin(it) }
-        val peakStep = sched.peakIntervalMin
-        val out = mutableListOf<String>()
-        var t = first
-        while (t <= last) {
-            out += String.format(java.util.Locale.US, "%02d:%02d", t / 60, t % 60)   // BUS-8：Locale 固定
-            val inPeak = peakStep != null && peakStart != null && peakEnd != null && t >= peakStart && t < peakEnd
-            t += if (inPeak) peakStep!! else step
-        }
-        // BUS-1：末班车必进时刻表（间隔推算可能永远落不到末班点）
-        if (out.isEmpty() || toMin(out.last()) < last) {
-            out += String.format(java.util.Locale.US, "%02d:%02d", last / 60, last % 60)
-        }
-        return out
-    }
-
-    private fun toMin(s: String): Int {
-        val parts = s.split(":")
-        return (parts.getOrNull(0)?.toIntOrNull() ?: return -1) * 60 +
-            (parts.getOrNull(1)?.toIntOrNull() ?: 0)
-    }
-
-    /** B1：表尾是否为“硬补的标称末班”（与间隔错位） */
-    fun lastIsStamped(sched: DirSchedule, times: List<String>): Boolean {
-        if (times.size < 2) return false
-        val step = sched.offPeakIntervalMin ?: return false
-        val gap = toMin(times.last()) - toMin(times[times.size - 2])
-        return gap < step
-    }
+    // 说明（v4.13 清理）：原 departureTimes() / lastIsStamped() 是「推算时刻表」的配套工具，
+    // 该功能已在 v4.10 按用户要求撤除，界面只保留首末班 + 间隔 + 去/返程方向标注，
+    // 两函数自此无任何调用点，属死代码，已移除（如需恢复见 git 历史）。
 }

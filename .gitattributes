@@ -1,0 +1,26 @@
+# 换行统一（v4.13 新增）
+#
+# 背景：本仓库在 Windows 上开发时 core.autocrlf=true 会把 shell 脚本在工作区写成 CRLF，
+# 而 gradlew 首行是 `#!/bin/bash` —— 带 CR 会导致 Linux/macOS 上 "bad interpreter"，
+# 构建直接失败（且很难一眼看出是换行问题）。此处显式锁定为 LF。
+#
+# 规则：仓库内一律 LF；二进制类型明确标记，避免被当文本改写。
+
+* text=auto eol=lf
+
+# 明确二进制（不做换行转换）
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.webp binary
+*.gif  binary
+*.ico  binary
+*.ttf  binary
+*.otf  binary
+*.jar  binary
+*.apk  binary
+*.sig  binary
+*.jks  binary
+*.keystore binary
+*.zip  binary
+*.gz   binary

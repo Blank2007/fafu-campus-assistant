@@ -19,19 +19,8 @@
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/AndroidManifest.xml"
-            line="69"
+            line="71"
             column="13"/>
-    </issue>
-
-    <issue
-        id="AndroidGradlePluginVersion"
-        message="A newer version of Gradle than 9.8.0 is available: 9.8.1"
-        errorLine1="distributionUrl=https\://services.gradle.org/distributions/gradle-9.8.0-bin.zip"
-        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="$HOME/.openclaw/workspace/CampusGlass/gradle/wrapper/gradle-wrapper.properties"
-            line="3"
-            column="17"/>
     </issue>
 
     <issue
@@ -92,7 +81,7 @@
         errorLine2="                                   ~~~~~">
         <location
             file="src/main/java/com/campusglass/MainActivity.kt"
-            line="305"
+            line="319"
             column="36"/>
     </issue>
 
@@ -136,7 +125,7 @@
         errorLine2="                                                                      ~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="290"
+            line="292"
             column="71"/>
     </issue>
 
@@ -147,7 +136,7 @@
         errorLine2="                                                                      ~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="299"
+            line="301"
             column="71"/>
     </issue>
 
@@ -158,7 +147,7 @@
         errorLine2="                                                                              ~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="305"
+            line="307"
             column="79"/>
     </issue>
 
@@ -169,7 +158,7 @@
         errorLine2="                                                                        ~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="321"
+            line="323"
             column="73"/>
     </issue>
 
@@ -180,7 +169,7 @@
         errorLine2="                                                                         ~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="533"
+            line="535"
             column="74"/>
     </issue>
 
@@ -191,7 +180,7 @@
         errorLine2="                                                                         ~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="534"
+            line="536"
             column="74"/>
     </issue>
 
@@ -413,36 +402,6 @@
             file="src/main/java/com/campusglass/ui/theme/ThemePrefs.kt"
             line="114"
             column="57"/>
-    </issue>
-
-    <issue
-        id="UnusedResources"
-        message="The resource `R.drawable.ic_launcher` appears to be unused"
-        errorLine1="&lt;vector xmlns:android=&quot;http://schemas.android.com/apk/res/android&quot;"
-        errorLine2="^">
-        <location
-            file="src/main/res/drawable/ic_launcher.xml"
-            line="2"
-            column="1"/>
-    </issue>
-
-    <issue
-        id="IconXmlAndPng"
-        message="The following images appear both as density independent `.xml` files and as bitmap files: src/main/res/drawable/ic_launcher.xml, src/main/res/mipmap-hdpi/ic_launcher.png">
-        <location
-            file="src/main/res/mipmap-xxxhdpi/ic_launcher.png"/>
-        <location
-            file="src/main/res/mipmap-xxhdpi/ic_launcher.png"/>
-        <location
-            file="src/main/res/mipmap-xhdpi/ic_launcher.png"/>
-        <location
-            file="src/main/res/mipmap-mdpi/ic_launcher.png"/>
-        <location
-            file="src/main/res/mipmap-hdpi/ic_launcher.png"/>
-        <location
-            file="src/main/res/mipmap-anydpi-v26/ic_launcher.xml"/>
-        <location
-            file="src/main/res/drawable/ic_launcher.xml"/>
     </issue>
 
     <issue
@@ -674,7 +633,7 @@
         errorLine2="                                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/home/HomeScreen.kt"
-            line="259"
+            line="255"
             column="72"/>
     </issue>
 
@@ -685,7 +644,7 @@
         errorLine2="                                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/home/HomeScreen.kt"
-            line="271"
+            line="267"
             column="68"/>
     </issue>
 
@@ -696,7 +655,7 @@
         errorLine2="                                                                                         ~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/home/HomeScreen.kt"
-            line="431"
+            line="417"
             column="90"/>
     </issue>
 
@@ -872,7 +831,7 @@
         errorLine2="                                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="366"
+            line="368"
             column="72"/>
     </issue>
 
@@ -883,7 +842,7 @@
         errorLine2="                                                                             ~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="489"
+            line="491"
             column="78"/>
     </issue>
 
@@ -894,7 +853,7 @@
         errorLine2="                            ~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="914"
+            line="916"
             column="29"/>
     </issue>
 
@@ -905,7 +864,7 @@
         errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="930"
+            line="932"
             column="49"/>
     </issue>
 
@@ -916,7 +875,7 @@
         errorLine2="                                        ~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="1021"
+            line="1025"
             column="41"/>
     </issue>
 
@@ -927,7 +886,7 @@
         errorLine2="                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="1035"
+            line="1039"
             column="45"/>
     </issue>
 
@@ -1048,7 +1007,7 @@
         errorLine2="                ~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/widget/TodayWidgetProvider.kt"
-            line="47"
+            line="56"
             column="17"/>
     </issue>
 
@@ -1059,7 +1018,7 @@
         errorLine2="                     ~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/widget/TodayWidgetProvider.kt"
-            line="80"
+            line="90"
             column="22"/>
     </issue>
 
@@ -1070,7 +1029,7 @@
         errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/widget/TodayWidgetProvider.kt"
-            line="93"
+            line="103"
             column="34"/>
     </issue>
 
@@ -1081,7 +1040,7 @@
         errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/widget/TodayWidgetProvider.kt"
-            line="138"
+            line="149"
             column="34"/>
     </issue>
 
@@ -1092,7 +1051,7 @@
         errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/widget/TodayWidgetProvider.kt"
-            line="202"
+            line="214"
             column="34"/>
     </issue>
 

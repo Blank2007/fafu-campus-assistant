@@ -17,6 +17,15 @@ import java.time.LocalDate
  * - 周次按 base 日期计算（W-1）；深浅色交给资源系统（W-6）
  * - 点击走 PendingIntent 模板 + fill-in（W-5）；requestCode 按角色 data URI 区分（W-8）
  * - 零点闹钟 + 开机刷新（W-7）；安装完成刷新（W-4）；避免重复渲染（W-12）
+ *
+ * ⚠️ 技术债（v4.13 记录，未修）：`setRemoteAdapter(viewId, Intent)` 与
+ * `notifyAppWidgetViewDataChanged(int[], int)` 在 API 37 已标记 @Deprecated，
+ * 替代方案是 `setRemoteAdapter(viewId, RemoteCollectionItems)` —— 属于**整套重构**
+ * （不再走 RemoteViewsService，改为直接把条目推进 RemoteViews，可一并删掉
+ * WidgetListService 与 Manifest 里的 service 声明）。小部件是历史高危区
+ * （v4.5 才根治过"小部件不可用"），且 RemoteViews 只允许白名单视图，
+ * 因此**不做无真机回归的迁移**，此处显式抑制告警并留档。
+ * 迁移前置条件：真机（HyperOS 4 / Android 17）回归通过后再动。
  */
 class TodayWidgetProvider : AppWidgetProvider() {
 
@@ -66,6 +75,7 @@ class TodayWidgetProvider : AppWidgetProvider() {
         if (sysAction) refreshQuoteAsync(context)
     }
 
+    @Suppress("DEPRECATION")   // 见类注释「技术债」：迁移需整套重构 + 真机回归，暂留
     override fun onUpdate(context: Context, mgr: AppWidgetManager, appWidgetIds: IntArray) {
         for (id in appWidgetIds) updateOne(context, mgr, id)
         if (appWidgetIds.isNotEmpty()) {
@@ -116,6 +126,7 @@ class TodayWidgetProvider : AppWidgetProvider() {
     companion object {
 
         /** 课表/诗句变化后主动刷新所有小部件（含列表数据） */
+        @Suppress("DEPRECATION")   // 见类注释「技术债」
         fun pushUpdate(context: Context) {
             runCatching {
                 val mgr = AppWidgetManager.getInstance(context)
@@ -146,6 +157,7 @@ class TodayWidgetProvider : AppWidgetProvider() {
             }
         }
 
+        @Suppress("DEPRECATION")   // 见类注释「技术债」
         private fun updateOne(context: Context, mgr: AppWidgetManager, id: Int) {
             val rv = RemoteViews(context.packageName, R.layout.widget_today)
             val prefs = context.getSharedPreferences("widget", Context.MODE_PRIVATE)

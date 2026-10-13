@@ -92,6 +92,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
+    "v4.13.sljzy · 2026-10-14 00:40" to "接棒维护版：更新验签支持密钥轮换过渡（公钥列表，保证老用户始终能一键直接安装）；修复 ContextWrapper 解包（系统栏图标深浅静默失效）；清理死代码与未必要断言、恒假判断；注释/文档勘误（targetSdk、陈旧注释、Release 资产名）；补齐 gradlew 与可移植 build-apk.sh；作者署名补接棒方并保留前手 Xiaomi-Mimo-V2.6-Pro 贡献",
     "v4.12.sljzy · 2026-10-12 22:25" to "删除失效的课表微信链接，改为标注：下方教务系统可查课表、微信「教务系统」公众号也可查",
     "v4.11.sljzy · 2026-10-12 00:25" to "DeepSeek-v4.10安全审查修复：隐私政策上线(首次同意+关于页入口+PRIVACY.md)；更新信任链加固(Ed25519验签+tag净化+校验信息强制)；小部件广播来源校验；targetSdk 36；包体清理；lint重开；queries合并；个人文件移除",
     "v4.10.sljzy · 2026-10-11 23:15" to "简化公交时刻展示（撤掉推算时刻表）；界面明确标注：时刻表包含往返（去程/返程）不同发车时刻，两方向首末班/班次不同请认准方向",
@@ -386,8 +387,8 @@ fun SettingsScreen() {
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Text(
-                        "全部代码由 AI 助手（Mimo v2.6 / OpenClaw 编程助手）独立编写；" +
-                            "需求设计、提示词与测试反馈由 Void_Blank 提供。人出想法，AI 写代码。",
+                        "全部代码由 AI 助手独立编写；需求设计、提示词与测试反馈由 Void_Blank 提供。人出想法，AI 写代码。\n" +
+                            "代码编写：Xiaomi-Mimo-V2.6-Pro（v1.0~v4.12）· WorkBuddy AI（v4.13 起接棒维护）",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     if (showUpdate) {
@@ -909,7 +910,7 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
                 }
                 hasReady -> {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Button(onClick = { launchInstall(readyFile!!) }) { Text("继续安装已下载的更新") }
+                        Button(onClick = { launchInstall(readyFile) }) { Text("继续安装已下载的更新") }
                         TextButton(onClick = {
                             readyFile.delete()
                             prefs.edit().remove("ready_path").apply()
@@ -979,8 +980,10 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
                                             }
                                             conn.disconnect()
                                             // U1：sha256 + 包名校验（B-2：无指纹一律拒绝）
+                                            // 说明：c.sha256 已由上方「无校验信息则禁用直接安装」的守卫保证非空，
+                                            //       此处不再重复判空（原 `expect == null ||` 恒为 false，编译器已告警）
                                             val expect = c.sha256
-                                            if (expect == null || !sha256Of(file).equals(expect, ignoreCase = true)) {
+                                            if (!sha256Of(file).equals(expect, ignoreCase = true)) {
                                                 file.delete()
                                                 return@runCatching null to "校验失败：文件指纹不匹配，已删除（可去浏览器下载）"
                                             }

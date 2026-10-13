@@ -137,6 +137,20 @@ object WidgetNav {
     val pendingTab = androidx.compose.runtime.mutableStateOf<String?>(null)
 }
 
+/**
+ * 逐层解包 ContextWrapper 找到宿主 Activity。
+ * Compose 的 LocalContext 通常就是 Activity，但在被包装的场景下（部分 ROM / 宿主容器）
+ * 直接强转会失败，导致系统栏图标深浅设置静默失效（V4-23 的原始意图）。
+ */
+private fun findActivity(context: android.content.Context): android.app.Activity? {
+    var ctx: android.content.Context? = context
+    while (ctx is android.content.ContextWrapper) {
+        if (ctx is android.app.Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}
+
 private enum class Tab(val label: String, val icon: ImageVector) {
     HOME("首页", Icons.Filled.Home),
     SCHEDULE("课表", Icons.Filled.School),
@@ -187,9 +201,9 @@ fun CampusGlassApp() {
         ) {
             // UI-1：系统栏图标深浅跟随 App 主题（而非系统设置）
             val winCtx = androidx.compose.ui.platform.LocalContext.current
-            // V4-23：ContextWrapper 逐层找 Activity（不再静默失效）
+            // V4-23：ContextWrapper 逐层解包找 Activity（不再静默失效）
             androidx.compose.runtime.SideEffect {
-                val act = winCtx as? android.app.Activity ?: return@SideEffect
+                val act = findActivity(winCtx) ?: return@SideEffect
                 val controller = androidx.core.view.WindowInsetsControllerCompat(act.window, act.window.decorView)
                 controller.isAppearanceLightStatusBars = !dark
                 controller.isAppearanceLightNavigationBars = !dark

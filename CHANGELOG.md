@@ -2,6 +2,29 @@
 
 （App 内「关于」页同步展示；版本号以 App 内显示为准）
 
+## v4.13.sljzy（2026-10-14 00:40）
+**接棒维护版**（由 WorkBuddy AI 接手后的首个版本；前手 Xiaomi-Mimo-V2.6-Pro 完成 v1.0~v4.12）
+
+- 🔐 **更新验签支持密钥轮换过渡（B-2 加固）**：`UpdateVerify` 由「单个硬编码公钥」改为**公钥列表**，
+  任一内置公钥验签通过即放行；并在源码内写明轮换流程——换密钥时必须先发一版"仍用旧私钥签名 +
+  同时内置新旧公钥"的过渡版，**保证老用户始终能一键直接安装**（面向的多是不懂这些的同学）
+- 🧹 **缺陷清理**：`BusData` 未必要的 `!!` 断言；`SettingsScreen` 未必要的 `!!` 与**恒为 false 的
+  空值判断**（SHA-256 校验处，已由上方守卫保证非空）；`Hitokoto` 注释称"连拉 3 次"但代码只拉 1 次
+- 🗑 **死代码清除**：`BusData.departureTimes()` / `lastIsStamped()`（v4.10 撤掉推算时刻表后已无调用）、
+  `Hitokoto.fetchFresh()`、`ScheduleStore.weekdayOf()` 的无意义分支、`ScheduleShare.decode()` 的冗余 split
+- 🐛 **修复 ContextWrapper 解包**：`MainActivity` 原注释称"逐层找 Activity"但代码未解包，
+  部分 ROM 下系统栏图标深浅设置会静默失效；现补 `findActivity()` 逐层解包，注释与代码一致
+- 📝 **注释勘误**：`AndroidManifest` 删除"检测淘宝/京东"的陈旧注释（项目从未实现该功能、
+  也未声明 `QUERY_ALL_PACKAGES`）；`TodayWidgetProvider` 显式标注 API 37 废弃 API 的技术债
+  （`setRemoteAdapter` / `notifyAppWidgetViewDataChanged`，替代方案需整套重构 + 真机回归，暂不迁移）
+- 📄 **文档修正**：README 技术栈 `targetSdk 37` → `36`（与实际不符）、Release 资产名改为英文实际格式；
+  作者署名补上接棒方，**保留前手 Xiaomi-Mimo-V2.6-Pro 的完整贡献署名**
+- 🛠 **构建链修复**：仓库补齐 `gradlew` / `gradlew.bat` / `gradle-wrapper.jar`（此前 README 写的
+  `./gradlew` 无法运行）；`local.properties` 由旧构建机 Linux 路径改为本机 SDK 路径；
+  `build-apk.sh` 由硬编码路径改为三级自动探测；wrapper 分发源改国内镜像（官方源实测 ~36 KB/s）
+- ✅ 验证：`:app:test` 5/5 通过 · `:app:assembleRelease` 成功 · Ed25519 签名 + 验签通过 ·
+  APK 元数据（com.campusglass / 77 / 4.13.sljzy / compileSdk 37 / targetSdk 36 / arm64-v8a）正确
+
 ## v4.12.sljzy（2026-10-12 22:25）
 - 🗑 删除「复制课表链接（去微信打开）」：该微信课表链接已失效（连同 URL 一并移除）
 - 📌 「📅 查看课表」改为渠道标注：**下方「教务系统」可查看课表；微信「教务系统」公众号也可以**
