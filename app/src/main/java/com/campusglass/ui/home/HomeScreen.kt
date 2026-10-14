@@ -285,21 +285,16 @@ fun HomeScreen(onGoto: (String) -> Unit) {
 
                         HorizontalDivider()
 
-                        // 📅 本学期校历（依据学校校历原文提取）
+                        // 📅 本学期校历（与课表「校历提示栏」同源：HolidayData.events）
                         var showCalendar by remember { mutableStateOf(false) }
                         Text("📅 本学期校历（2026-2027学年第一学期）",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold)
-                        listOf(
-                            "🏫 8/30 师生报到 · 8/31 老生开课",
-                            "🎓 9/5 新生报到 · 9/7 新生开课",
-                            "🌕 中秋 9/25-27 放假3天 · 🇨🇳 国庆 10/1-7 放假7天",
-                            "⚠️ 调休上课：9/20(日)上10/6(二)课 · 10/10(六)上10/7(三)课",
-                            "🎖 新生军训 10/26-11/8",
-                            "❄️ 寒假 2027/1/21-2/20（共31天）",
-                            "🧨 春节 2/6 · 🏮 元宵 2/20 · 元旦以国办通知为准",
-                        ).forEach { line ->
-                            Text(line, style = MaterialTheme.typography.bodySmall)
+                        com.campusglass.schedule.HolidayData.events.forEach { e ->
+                            Text(
+                                "${e.kind.emoji} ${e.title()}" + if (e.note.isNotBlank()) "（${e.note}）" else "",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
                         }
                         Text("「时间安排若有调整另行通知」",
                             style = MaterialTheme.typography.labelSmall,

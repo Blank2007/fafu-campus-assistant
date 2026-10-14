@@ -730,72 +730,94 @@ private fun CourseBlock(c: Course, modifier: Modifier, onCourse: (Course) -> Uni
     }
 }
 
-// ======================= 节假日 =======================
+// ======================= 校历提示栏 =======================
 
+/**
+ * 校历提示栏：展示选中周内的**全部校历事件**（假期 / 调休 / 军训 / 教学安排 / 传统节日）。
+ *
+ * 数据来自 [HolidayData.events]（逐条对照学校校历原文录入，见首页「查看校历原图」）。
+ * 有假期时用暖色底突出，其余情况用中性底色；无事件周给出「本周无校历事件」与本周日期区间。
+ */
 @Composable
 private fun HolidayBanner(week: Int) {
     val context = LocalContext.current
-    val hits = HolidayData.holidaysInWeek(
-        ScheduleStore.dateOf(context, week, 7),
-        ScheduleStore.dateOf(context, week, 6),
-    )
-    val makeups = HolidayData.makeupInWeek(
-        ScheduleStore.dateOf(context, week, 7),
-        ScheduleStore.dateOf(context, week, 6),
-    )
+    val weekStart = ScheduleStore.dateOf(context, week, 7)   // 周日为周起点
+    val weekEnd = ScheduleStore.dateOf(context, week, 6)
+    val weekEvents = HolidayData.eventsInWeek(weekStart, weekEnd)
+    val holidayEvents = weekEvents.filter { it.kind.isHoliday }
+    val hasHoliday = holidayEvents.isNotEmpty()
+
     val today = LocalDate.now()
-    val todayHoliday = HolidayData.holidays.firstOrNull { !today.isBefore(it.start) && !today.isAfter(it.end) }
-    val todayMakeup = HolidayData.makeupDays.firstOrNull { it.start == today }
+    val todayEvents = HolidayData.eventsOn(today)
+    val todayHoliday = todayEvents.firstOrNull { it.kind.isHoliday }
+    val stale = today.isAfter(HolidayData.dataEnd)                                    // S20
     val dark = ThemePrefs.themeMode.value == ThemePrefs.ThemeMode.DARK ||
         (ThemePrefs.themeMode.value == ThemePrefs.ThemeMode.SYSTEM &&
             androidx.compose.foundation.isSystemInDarkTheme())
-    val stale = today.isAfter(HolidayData.holidays.maxOfOrNull { it.end } ?: today)   // S20
 
     Card(
         Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (hits.isEmpty()) MaterialTheme.colorScheme.surfaceVariant
-            else if (dark) Color(0xFF5A4A20) else Color(0xFFFFF3D6)
+            containerColor = when {
+                hasHoliday -> if (dark) Color(0xFF5A4A20) else Color(0xFFFFF3D6)
+                weekEvents.isNotEmpty() -> MaterialTheme.colorScheme.secondaryContainer
+                else -> MaterialTheme.colorScheme.surfaceVariant
+            }
         ),
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             if (stale) {
-                Text("假期数据待更新（当前数据仅覆盖到 2026-2027 学年）",   // S20
+                Text("校历数据待更新（当前数据仅覆盖到 2026-2027 学年）",   // S20
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface)
-            } else if (hits.isEmpty()) {
-                if (makeups.isNotEmpty()) {
-                    Text(
-                        "⚠️ 本周调休上课：" + makeups.joinToString("、"),
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                } else if (todayMakeup != null) {
-                    Text(
-                        "⚠️ 今天${todayMakeup.name.removePrefix("调休上课")}！",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
+            } else if (weekEvents.isEmpty()) {
                 Text(
-                    "本周无假期" + if (todayHoliday != null) " · 今天是【${todayHoliday.name}】🎉" else "",
+                    "📅 ${weekStart.monthValue}/${weekStart.dayOfMonth}-${weekEnd.monthValue}/${weekEnd.dayOfMonth}" +
+                        " 本周无校历事件",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
             } else {
+                val head = if (hasHoliday) "🏖 本周期间假期：" + holidayEvents.joinToString("、") { it.title() }
+                else "📅 本周校历安排"
                 Text(
-                    "🏖 本周期间假期：" + hits.joinToString("、"),
+                    head,
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                Text(
-                    "假期/调休依据学校校历" + if (todayHoliday != null) " · 今天【${todayHoliday.name}】🎉" else "",
+                // 非假期类事件逐条列出（教学安排 / 军训 / 调休 / 节日）
+                weekEvents.filterNot { it.kind.isHoliday }.forEach { e ->
+                    Text(
+                        "${e.kind.emoji} ${e.title()}" + if (e.note.isNotBlank()) "（${e.note}）" else "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                // 假期补充说明（如"共3天"）
+                holidayEvents.mapNotNull { e -> e.note.takeIf { it.isNotBlank() }?.let { "🏖 ${e.name}：$it" } }
+                    .forEach { line ->
+                        Text(line, style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f))
+                    }
+            }
+
+            // 今天相关提示（与选中周无关，始终提示）
+            if (todayHoliday != null) {
+                Text("🎉 今天是【${todayHoliday.name}】",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface)
+            } else if (todayEvents.isNotEmpty()) {
+                Text("📌 今天：" + todayEvents.joinToString("、") { it.name },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface)
+            }
+
+            if (!stale) {
+                Text("校历事件依据学校校历（可到首页「本学期校历」查看原图）",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                )
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
             }
         }
     }
