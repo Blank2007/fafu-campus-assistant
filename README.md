@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://github.com/Blank2007/fafu-campus-assistant/actions/workflows/ci.yml"><img src="https://github.com/Blank2007/fafu-campus-assistant/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://github.com/Blank2007/fafu-campus-assistant/releases/latest"><img src="https://img.shields.io/github/v/release/Blank2007/fafu-campus-assistant" alt="最新版本"></a>
+</p>
+
 # 校园助手-FAFUer专用 🎒
 
 > 🗓 **本项目全程在 AI 助手的每日 3 小时免费时长内完成开发**（需求 → 设计 → 开发 → 多轮迭代 → 开源发布，均为这 3 小时内对话完成）
@@ -34,6 +40,7 @@
 - `local.properties` 需指向本机 SDK：`sdk.dir=/你的/Android/sdk`
 - ⚠️ API 37 采用**小版本命名**：平台包是 `platforms;android-37.0`，安装目录为 `platforms/android-37.0`（不是 `android-37`）
 - `build-apk.sh` 是等价的一键脚本（自动探测工具链）：`bash build-apk.sh`
+- 每次推送到 `main` 会自动跑 GitHub Actions：单元测试 + 静态守卫（版本号一致、签名配置未被破坏、无写死开发机路径、`gradlew` 行尾与可执行位、LICENSE 存在），配置见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 - 发版需额外生成 Ed25519 签名资产 `.apk.sig`，否则 App 内「直接下载安装」会被拒绝（见 [CHANGELOG.md](CHANGELOG.md) 与发布流程说明）
 
 技术栈：Kotlin · Jetpack Compose (Material 3) · AGP 9 · compileSdk 37 / targetSdk 36 / minSdk 31
@@ -80,7 +87,9 @@
 
 ## 📄 License
 
-本项目代码以 MIT 协议开源（第三方依赖遵循其各自许可证）。
+本项目代码以 **[MIT 协议](LICENSE)** 开源（第三方依赖遵循其各自许可证）。
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## ⚠️ 已知问题（如实声明）
 - 当前 release 使用 **debug 签名**（正式签名机制已预留：项目根放 `keystore.properties` 即启用）

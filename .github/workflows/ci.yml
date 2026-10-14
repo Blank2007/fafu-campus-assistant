@@ -1,0 +1,218 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# 同一分支上的新推送会取消上一次未跑完的任务，省 runner 额度。
+# A newer push on the same branch cancels the previous unfinished run, saving runner minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ===========================================================================
+  # 一、单元测试 —— 证明源码能编译、核心逻辑正确
+  #     Unit tests — proves the sources compile and the core logic is correct
+  # ===========================================================================
+  test:
+    name: 单元测试 / Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: 安装 Android SDK / Install Android SDK
+        shell: bash
+        run: |
+          # 与 DroidExtend 仓库同一套做法：不走 sdkmanager、不下 150MB 的 cmdline-tools，
+          # 直接从 dl.google.com 拉需要的两个 zip 解压 —— 也就绕过了许可证交互。
+          # Same approach as the DroidExtend repo: skip sdkmanager and the ~150 MB cmdline-tools,
+          # fetch the two zips we need straight from dl.google.com (which also skips licence prompts).
+          #
+          # 包名与 URL 取自 dl.google.com 的 repository2-3.xml，两者都在稳定渠道 channel-0：
+          #   platforms;android-37.0  ->  platform-37.0_r02.zip
+          #   build-tools;37.0.0      ->  build-tools_r37_linux.zip
+          # Package names/URLs come from dl.google.com's repository2-3.xml, both on the stable channel:
+          set -euo pipefail
+          SDK="$RUNNER_TEMP/android-sdk"
+          mkdir -p "$SDK/build-tools" "$SDK/platforms"
+
+          fetch() {  # $1=url  $2=目标目录 / destination directory
+            local url="$1" dest="$2" zip unz inner
+            zip="$RUNNER_TEMP/$(basename "$url")"
+            echo "↓ $url"
+            curl -fsSL --retry 3 --retry-delay 2 -o "$zip" "$url"
+            unz="$RUNNER_TEMP/unz"
+            rm -rf "$unz"; mkdir -p "$unz"
+            unzip -q "$zip" -d "$unz"
+            # zip 解出来只有一层目录，名字是 android-xx，直接挪到目标位置即可
+            # The zip contains a single top-level dir (named android-xx); just move it into place.
+            inner="$(find "$unz" -mindepth 1 -maxdepth 1 -type d | head -1)"
+            mkdir -p "$(dirname "$dest")"
+            mv "$inner" "$dest"
+          }
+
+          fetch "https://dl.google.com/android/repository/platform-37.0_r02.zip"     "$SDK/platforms/android-37.0"
+          # 项目没有 pin buildToolsVersion，AGP 会挑自己的默认版本，两个都装上最省心
+          # buildToolsVersion is not pinned, so AGP picks its own default — install both to be safe.
+          fetch "https://dl.google.com/android/repository/build-tools_r37_linux.zip" "$SDK/build-tools/37.0.0"
+          fetch "https://dl.google.com/android/repository/build-tools_r36_linux.zip" "$SDK/build-tools/36.0.0"
+
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "--- platforms ---"; ls "$SDK/platforms"
+          echo "--- build-tools ---"; ls "$SDK/build-tools"
+
+      - name: 缓存 Gradle 依赖 / Cache Gradle deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: 准备 Gradle / Prepare Gradle
+        shell: bash
+        run: |
+          # 仓库默认把 wrapper 指向国内镜像（腾讯云），那是给国内开发环境加速的；
+          # GitHub runner 在海外，改用 Gradle 官方源更稳、更快。
+          # The repo points the wrapper at a China-based mirror (Tencent Cloud) to speed up domestic
+          # dev; GitHub runners are overseas, so switch to the official Gradle CDN here.
+          sed -i 's#https://mirrors.cloud.tencent.com/gradle/#https://services.gradle.org/distributions/#' \
+            gradle/wrapper/gradle-wrapper.properties
+          grep '^distributionUrl' gradle/wrapper/gradle-wrapper.properties
+
+      - name: 运行单元测试 / Run unit tests
+        run: ./gradlew :app:test --console=plain --stacktrace
+
+      - name: 上传测试报告 / Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: app/build/reports/tests/
+          if-no-files-found: ignore
+
+  # ===========================================================================
+  # 二、静态守卫 —— 抓"改错了才发现"的那一类问题（与 08-代码与文档规范.md 对应）
+  #     Static guards — catch the class of problems you'd otherwise find too late
+  #     (mirrors the project's 08-code-and-docs-conventions doc)
+  # ===========================================================================
+  guards:
+    name: 静态检查 / Static checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 版本号一致 / Version consistency
+        shell: python
+        run: |
+          # 版本号必须同步的三处（01-工作流与约定.md）：
+          #   app/build.gradle.kts 的 versionName
+          #   CHANGELOG.md 首条
+          #   SettingsScreen.kt 的 changelog map 首项
+          # 第四处是发版后打的 git tag，只在发版流程里核对，CI 里没有。
+          # The version must stay in sync across three places (the fourth, the git tag, only exists
+          # after a release and is checked by the release flow, not here).
+          import re, sys, pathlib
+
+          gradle = pathlib.Path("app/build.gradle.kts").read_text(encoding="utf-8")
+          vname = re.search(r'versionName\s*=\s*"([^"]+)"', gradle).group(1)
+          vcode = int(re.search(r'versionCode\s*=\s*(\d+)', gradle).group(1))
+
+          changelog = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+          first = re.search(r'^##\s*v([0-9][^\s（(]*)', changelog, re.M)
+          cl_ver = first.group(1) if first else None
+
+          settings = pathlib.Path("app/src/main/java/com/campusglass/ui/settings/SettingsScreen.kt").read_text(encoding="utf-8")
+          m = re.search(r'"v([0-9][^\s·]*)\s*·', settings)
+          st_ver = m.group(1) if m else None
+
+          print(f"app/build.gradle.kts  versionName = {vname}  (versionCode {vcode})")
+          print(f"CHANGELOG.md 首条版本              = {cl_ver}")
+          print(f"SettingsScreen.kt changelog 首项   = {st_ver}")
+
+          bad = []
+          if cl_ver != vname:
+              bad.append(f"CHANGELOG.md 是 {cl_ver}，build.gradle.kts 是 {vname}")
+          if st_ver != vname:
+              bad.append(f"SettingsScreen.kt 是 {st_ver}，build.gradle.kts 是 {vname}")
+          if bad:
+              print("::error::版本号不一致 (version mismatch)：\n  - " + "\n  - ".join(bad))
+              sys.exit(1)
+          print(f"版本号三处一致，均为 {vname}。")
+
+      - name: APK 签名配置结构未被破坏 / Signing config structure intact
+        shell: bash
+        run: |
+          # ⚠️ 本项目坚持用固定的 debug keystore 签名（A-1）：
+          # 证书必须恒为 f2e3c949…，否则老用户覆盖安装会报签名冲突、必须卸载重装（课表全丢）。
+          # 这条守卫只在"签名配置被误删/误改"时报警；产物本身由本地 check-signing.sh 把关。
+          # The project intentionally ships a fixed debug keystore; if the signing config is
+          # accidentally removed, existing users cannot upgrade without uninstalling. This guard
+          # only flags structural edits (the APK itself is verified by check-signing.sh locally).
+          set -euo pipefail
+          fail() { echo "::error file=app/build.gradle.kts::$1"; exit 1; }
+          grep -qE 'signingConfigs\s*\{' app/build.gradle.kts || fail "signingConfigs 块缺失"
+          grep -qE 'rootProject\.file\("keystore\.properties"\)' app/build.gradle.kts || fail "未从 keystore.properties 读取签名配置"
+          grep -qE 'storeFile\s*=' app/build.gradle.kts || fail "signingConfig 缺少 storeFile 赋值"
+          # 反例：有人把签名写死成机器默认 debug keystore（~/.android/debug.keystore）就会命中
+          if grep -qE 'debug\.keystore' app/build.gradle.kts; then
+            fail "signingConfig 被改成引用机器默认 debug.keystore —— 换机器签名就变了，老用户装不上"
+          fi
+          echo "签名配置结构完整（keystore.properties + storeFile），无写死 debug.keystore。"
+
+      - name: 禁止写死开发机路径 / No hard-coded dev machine paths
+        shell: bash
+        run: |
+          # 抓"别把我这台机器的目录写进代码"这一类问题。只查会被打包/会被别人跑的代码。
+          # Catches "don't bake this machine's directories into the code" — only packaged/run-by-others code.
+          set -euo pipefail
+          PATS='D:\\workbuddy|D:\\Download|C:\\Users\\15530|/home/[a-z]|D:\\dsh'
+          HITS=$(grep -rnE "$PATS" \
+                   app/src/main/java app/src/main/res app/build.gradle.kts build.gradle.kts \
+                   settings.gradle.kts build-apk.sh 2>/dev/null | grep -v 'sdk.dir=' || true)
+          if [ -n "$HITS" ]; then
+            echo "$HITS" | while IFS= read -r l; do echo "::error::$l"; done
+            echo "::error::发现写死的开发机路径，请改用相对路径 / 环境变量 / \$PSScriptRoot"
+            exit 1
+          fi
+          echo "没有写死的开发机路径。"
+
+      - name: gradlew 可执行位与 LF 行尾 / gradlew executable bit and LF endings
+        shell: bash
+        run: |
+          # 本机 core.autocrlf=true 曾把 gradlew 写成 CRLF，到 Linux/macOS 上直接 "bad interpreter"；
+          # 同理 gradlew 少了可执行位就会 "Permission denied"。这两条都在这里兜住。
+          # core.autocrlf=true once wrote gradlew as CRLF, breaking "bad interpreter" on Linux/macOS;
+          # likewise a missing exec bit gives "Permission denied". Both are caught here.
+          set -euo pipefail
+          if grep -q $'\r' gradlew; then
+            echo "::error file=gradlew::gradlew 含 CRLF 行尾，Linux/macOS 上会报 bad interpreter"
+            exit 1
+          fi
+          if [ ! -x gradlew ]; then
+            echo "::error file=gradlew::gradlew 缺少可执行位（git 中应为 100755），CI/Linux 上无法直接运行"
+            exit 1
+          fi
+          if [ ! -f .gitattributes ] || ! grep -q 'eol=lf' .gitattributes; then
+            echo "::error file=.gitattributes::.gitattributes 缺失或未锁定 eol=lf"
+            exit 1
+          fi
+          echo "gradlew 为 LF 且带可执行位，.gitattributes 已锁定。"
+
+      - name: LICENSE 存在 / LICENSE present
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -f LICENSE ] || { echo "::error::缺少 LICENSE 文件"; exit 1; }
+          head -1 LICENSE | grep -qi 'MIT License' || { echo "::error::LICENSE 首行不是 MIT License"; exit 1; }
+          echo "LICENSE 存在且为 MIT。"
