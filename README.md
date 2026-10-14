@@ -4,7 +4,7 @@
 >
 > 全部代码由 AI 助手独立编写，需求设计、提示词（Prompt）与测试反馈由 **Void_Blank** 提供。目前bug较多，抱歉。
 >
-> **代码编写分工**：**v1.0 ~ v4.12** 由 **Xiaomi-Mimo-V2.6-Pro**（Mimo v2.6-Pro / OpenClaw 编程助手）完成；**v4.13 起**由 **WorkBuddy AI** 接棒维护。前手的架构设计与逐行实现是后续一切迭代的基础，谨此致谢。
+> **代码编写分工**：**v1.0 ~ v4.12** 由 **Xiaomi-Mimo-V2.6-Pro**（Mimo v2.6-Pro / OpenClaw 编程助手）完成；**v4.13 起**由 **WorkBuddy AI(DeepSeek-V4.1-Flash)** 接棒维护。前手的架构设计与逐行实现是后续一切迭代的基础，谨此致谢。
 
 **系统要求**：Android 15+（兼容 Android 12~17，优先适配小米澎湃 OS 4）· 安装包约 3 MB 
 
