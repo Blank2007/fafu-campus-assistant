@@ -42,7 +42,28 @@ jobs:
           # Package names/URLs come from dl.google.com's repository2-3.xml, both on the stable channel:
           set -euo pipefail
           SDK="$RUNNER_TEMP/android-sdk"
-          mkdir -p "$SDK/build-tools" "$SDK/platforms"
+          mkdir -p "$SDK/build-tools" "$SDK/platforms" "$SDK/licenses"
+
+          # ⚠️ 关键一步：AGP 会去 $ANDROID_HOME/licenses 里查"许可证已接受"的哈希，
+          # 查不到就报 "License for package Android SDK Platform 37.0 not accepted" ——
+          # **哪怕平台文件已经就位**也会拒绝使用（第一次跑 CI 就是栽在这里）。
+          # runner 预装的 SDK 里许可证早接受过了，直接借过来；万一没有就写入通用哈希兜底。
+          # Critical: AGP checks the accepted-licence hashes under $ANDROID_HOME/licenses and
+          # refuses to use the platform without them, even when the files are already in place.
+          # Borrow the runner's pre-installed licences; fall back to the well-known hashes.
+          for d in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" /usr/local/lib/android/sdk; do
+            if [ -n "$d" ] && [ -d "$d/licenses" ]; then
+              cp -f "$d"/licenses/* "$SDK/licenses/" 2>/dev/null || true
+              echo "借用了预装许可证：$d/licenses"
+              break
+            fi
+          done
+          if [ -z "$(ls -A "$SDK/licenses" 2>/dev/null)" ]; then
+            echo "未找到预装许可证，写入通用哈希兜底"
+            printf '24333f8a63b6825ea9c5514f83c2829b004d1fee\n8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb78af6dfcb131a6481e\n' > "$SDK/licenses/android-sdk-license"
+            printf '84831b9409646a918e30573bab4c9c91346d8abd\n' > "$SDK/licenses/android-sdk-preview-license"
+            printf '859f317696f67ef3d7f30a50a5560e7834b43903\n' > "$SDK/licenses/android-sdk-arm-dbt-license"
+          fi
 
           fetch() {  # $1=url  $2=目标目录 / destination directory
             local url="$1" dest="$2" zip unz inner
@@ -69,6 +90,7 @@ jobs:
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
           echo "--- platforms ---"; ls "$SDK/platforms"
           echo "--- build-tools ---"; ls "$SDK/build-tools"
+          echo "--- licenses ---"; ls "$SDK/licenses"
 
       - name: 缓存 Gradle 依赖 / Cache Gradle deps
         uses: actions/cache@v4
@@ -86,9 +108,20 @@ jobs:
           # GitHub runner 在海外，改用 Gradle 官方源更稳、更快。
           # The repo points the wrapper at a China-based mirror (Tencent Cloud) to speed up domestic
           # dev; GitHub runners are overseas, so switch to the official Gradle CDN here.
-          sed -i 's#https://mirrors.cloud.tencent.com/gradle/#https://services.gradle.org/distributions/#' \
+          #
+          # ⚠️ .properties 里的 URL 写作 https\://…（冒号被转义），所以这里只替换"主机+路径"，
+          # 不碰协议部分，免得踩反斜杠的坑（第一版就是整串替换、静默失配、没生效）。
+          # The URL is written as https\://… in .properties, so only the host+path is swapped here,
+          # sidestepping the escaped colon (the first version replaced the whole string and silently
+          # did nothing).
+          set -euo pipefail
+          sed -i 's#mirrors\.cloud\.tencent\.com/gradle/#services.gradle.org/distributions/#' \
             gradle/wrapper/gradle-wrapper.properties
           grep '^distributionUrl' gradle/wrapper/gradle-wrapper.properties
+          if ! grep -q 'services\.gradle\.org/distributions/' gradle/wrapper/gradle-wrapper.properties; then
+            echo "::error file=gradle/wrapper/gradle-wrapper.properties::wrapper 镜像替换失败（CI 会去拉国内镜像）"
+            exit 1
+          fi
 
       - name: 运行单元测试 / Run unit tests
         run: ./gradlew :app:test --console=plain --stacktrace
