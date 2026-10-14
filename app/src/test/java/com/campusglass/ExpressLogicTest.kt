@@ -193,4 +193,24 @@ class ExpressLogicTest {
             assertTrue("清单缺少 $g", g.all { ExpressApi.SUPPORTED_COURIERS.contains(it) })
         }
     }
+
+    // ---------------- 占位轨迹判定（v4.17：不再把"查无结果"当轨迹） ----------------
+
+    @Test
+    fun placeholderTrace_detectsEmptyAndNoResult() {
+        assertTrue(ExpressApi.isPlaceholderTrace(""))
+        assertTrue(ExpressApi.isPlaceholderTrace("   "))
+        assertTrue(ExpressApi.isPlaceholderTrace("查无结果"))
+        assertTrue(ExpressApi.isPlaceholderTrace("暂无结果"))
+        assertTrue(ExpressApi.isPlaceholderTrace("暂时查无结果，请稍后再试"))
+    }
+
+    @Test
+    fun placeholderTrace_keepsRealTraces() {
+        // 真实轨迹里出现"查"或"结果"这类字眼也不能被误判
+        assertFalse(ExpressApi.isPlaceholderTrace("您的快件已投递，收件人:3栋大堂"))
+        assertFalse(ExpressApi.isPlaceholderTrace("【广东省珠海市香洲区】正在为您派件"))
+        assertFalse(ExpressApi.isPlaceholderTrace("快件已到达【佛山转运中心】"))
+        assertFalse(ExpressApi.isPlaceholderTrace("查询结果已更新，快件在【郑州转运中心】"))
+    }
 }

@@ -230,7 +230,7 @@ fun PickupScreen() {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Text("正在查询…", style = MaterialTheme.typography.bodySmall)
+                    Text("正在查询…（免费源偶发查不到，会自动重试）", style = MaterialTheme.typography.bodySmall)
                     TextButton(onClick = {
                         queryJob?.cancel()
                         loading = false

@@ -8,10 +8,23 @@ import java.net.URL
 import java.net.URLEncoder
 
 /**
- * 快递100 网页同款接口（只读）· v5（审查 E1-E12 全量修复）。
- * - suspend + 可取消：协程取消立即生效（E2），整轮查询 20s 总时限
- * - 正向证据判定签收（E4）；状态码表补全（E3）；限流单独识别（E6）
- * - data 元素类型防护（E7）；缓存键大小写归一 + 失败短缓存 + 强制刷新（E12）
+ * 快递100 网页同款接口（只读）· v6（v4.17）。
+ *
+ * v4.17 关键修正（实测 2026-10-15，测试单号极兔）：
+ * - **不再用 `www.kuaidi100.com`，改用 `m.kuaidi100.com`**：同一单号同一参数，
+ *   www 连续 12 次全部返回"查无结果"，m 站第 2 次/第 5 次就拿到了真实轨迹。
+ * - **接口是"概率性"的**：同一单号单次请求只有一部分会返回轨迹，其余返回
+ *   `condition=F00` + `data:[{"context":"查无结果"}]`（多节点缓存不一致）。
+ *   所以**同一个公司必须重试若干次**——原来只试一次就换下一个候选，
+ *   这才是"什么单号都查不到"的真正原因。
+ * - **不再只看 `condition` 判空**：实测存在 `condition=F00` 但 `data` 里有 12 条真实轨迹的响应，
+ *   一律以 `data` 内容为准。
+ * - 网页端没有可爬的服务端 HTML：`m.kuaidi100.com/result.jsp` 是 Vue 单页应用，
+ *   它自己也是调这个 `/query` 接口（见 `result.js` 的 `request("/query", …)`），
+ *   所以"爬网页"和"调接口"拿到的是同一份数据。
+ *
+ * 其它（沿用 v5）：suspend + 可取消（E2）；正向证据判定签收（E4）；状态码表补全（E3）；
+ * 限流单独识别（E6）；data 元素类型防护（E7）；缓存键大小写归一 + 失败短缓存 + 强制刷新（E12）。
  */
 object ExpressApi {
 
@@ -28,7 +41,21 @@ object ExpressApi {
     private const val UA =
         "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 (KHTML, like Gecko) Mobile Safari/537.36"
 
-    private const val TOTAL_BUDGET_MS = 20_000L      // E2：整轮总时限
+    /** v4.17：m 站命中率明显好于 www（www 实测连续 12 次全空） */
+    private const val HOST = "m.kuaidi100.com"
+
+    private const val TOTAL_BUDGET_MS = 25_000L      // E2：整轮总时限（v4.17 由 20s 放宽到 25s，留给重试）
+
+    /**
+     * v4.17：同一家公司最多试几次。
+     * 实测（2026-10-15，连发 15 次）：该免费接口单次命中率约 13%~25%，
+     * 其余返回 `condition=F00`「查无结果」。取 5 次 → 单公司约 50%~76%，
+     * 两个候选公司合计约 75%~94%。失败响应通常很快（~0.15s），所以多试几次成本不高。
+     */
+    private const val TRY_PER_COM = 5
+
+    /** v4.17：同一家公司两次尝试之间的间隔（"查无结果"通常是极快的缓存未命中，不用等太久） */
+    private const val RETRY_GAP_MS = 250L
 
     private val PREFIX_MAP = listOf(
         "SF" to ("shunfeng" to "顺丰速运"),
@@ -42,8 +69,7 @@ object ExpressApi {
         "EMS" to ("ems" to "EMS"),
     )
 
-    /** 代码 → 中文名兜底（E12：不暴露英文内部代码） */
-    private val CODE_NAMES = mapOf(
+    /** 代码 → 中文名兜底（E12：不暴露英文内部代码） */    private val CODE_NAMES = mapOf(
         "shunfeng" to "顺丰速运", "yuantong" to "圆通速递", "zhongtong" to "中通快递",
         "shentong" to "申通快递", "yunda" to "韵达速递", "jtexpress" to "极兔速递",
         "jd" to "京东物流", "debang" to "德邦快递", "ems" to "EMS",
@@ -64,7 +90,16 @@ object ExpressApi {
     val SUPPORTED_COURIERS: List<String> = CODE_NAMES.values.distinct()
 
     const val SUPPORTED_HINT =
-        "免费接口覆盖主流快递；个别小快递、刚揽收未同步的单号可能暂时查不到"
+        "免费数据源偶尔查不到，会自动重试几次；仍无结果时可点结果卡里的「去快递100 网页查」"
+
+    /**
+     * v4.17：这条"轨迹"是不是占位条目（不是真实物流）。
+     *
+     * 免费接口查不到时会返回 `data:[{"context":"查无结果"}]`，把它当成轨迹显示出去
+     * 就变成了"查到一条查无结果"，所以这里统一剔掉。抽成独立函数是为了能单测。
+     */
+    internal fun isPlaceholderTrace(context: String): Boolean =
+        context.isBlank() || context.contains("查无结果") || context.contains("暂无结果")
 
     private fun prettyName(code: String, raw: String): String =
         raw.ifBlank { CODE_NAMES[code] ?: code }
@@ -150,83 +185,95 @@ object ExpressApi {
             return Result(false, "未知", "", emptyList(), "没识别出快递公司，请核对单号")
         }
 
-        // ---- 2) 依序试查 + 交叉校验 ----
+        // ---- 2) 依序试查（每家公司重试若干次）+ 交叉校验 ----
         var networkFailures = 0
         var limited = 0                                  // E6：限流计数
         var serverErr = 0                                // V4-25：服务端异常（不是限流）
+        var emptyHits = 0                                // v4.17：接口正常返回、但这次没给轨迹
         for ((idx, com) in candidates.withIndex()) {
             if (System.currentTimeMillis() > deadline) break        // E2：总时限
             if (idx > 0) delay(400)                                  // 可取消（E2）
 
-            val remain = (deadline - System.currentTimeMillis()).coerceIn(1_000, TOTAL_BUDGET_MS)   // V4-8
-            // v4.16：参数与快递100 网页端（m.kuaidi100.com/result.jsp）完全对齐（id/valicode/temp），
-            // 尽量命中它同一套缓存；temp 用随机数是为了绕开 CDN 缓存。
-            val q = try {
-                get(
-                    "https://www.kuaidi100.com/query?type=${com.code}&postid=$encoded" +
-                        "&id=1&valicode=&temp=${Math.random()}&phone=",
-                    remain,
-                )
-            } catch (e: IOException) {
-                if (e.message?.contains("403") == true) limited++ else networkFailures++
-                continue
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e                                             // E2：取消要冒泡
-            } catch (_: Exception) {
-                networkFailures++
-                continue
+            // v4.17：这家公司最多试 TRY_PER_COM 次。
+            // 实测该免费接口是"概率性"的：同一单号、同一参数，一部分请求返回真实轨迹，
+            // 其余返回 condition=F00「查无结果」（多节点缓存不一致）。
+            // 原来只试一次就换下一个候选 —— 这正是"什么单号都查不到"的真正原因。
+            for (attempt in 0 until TRY_PER_COM) {
+                if (System.currentTimeMillis() > deadline) break
+                if (attempt > 0) delay(RETRY_GAP_MS)                 // 可取消（E2）
+
+                val remain = (deadline - System.currentTimeMillis()).coerceIn(1_000, TOTAL_BUDGET_MS)   // V4-8
+                // 参数与快递100 网页端（m.kuaidi100.com/result.jsp）对齐：id/valicode/temp/phone。
+                // temp 用随机数是为了绕开 CDN 缓存，尽量拿到"新鲜"的那一份。
+                val q = try {
+                    get(
+                        "https://$HOST/query?type=${com.code}&postid=$encoded" +
+                            "&id=1&valicode=&temp=${Math.random()}&phone=",
+                        remain,
+                    )
+                } catch (e: IOException) {
+                    if (e.message?.contains("403") == true) limited++ else networkFailures++
+                    continue
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e                                             // E2：取消要冒泡
+                } catch (_: Exception) {
+                    networkFailures++
+                    continue
+                }
+
+                val json = runCatching { JSONObject(q) }.getOrNull()
+                if (json == null) { serverErr++; continue }             // V4-25：响应非 JSON（接口异常，非限流）
+                if (json.optString("status") != "200") {
+                    serverErr++                                         // V4-25：服务端错误（如公司代码无效）
+                    continue
+                }
+
+                val respNu = json.optString("nu").replace(" ", "")
+                if (respNu.isNotBlank() && !respNu.equals(nu, ignoreCase = true)) continue
+                val respCom = json.optString("com")
+                if (respCom.isNotBlank() && respCom != com.code) continue
+
+                val arr = json.optJSONArray("data")
+                val traces = mutableListOf<Trace>()
+                if (arr != null) {
+                    for (i in 0 until arr.length()) {
+                        val o = arr.optJSONObject(i) ?: continue        // E7：类型防护
+                        val ctx = o.optString("context")
+                        // v4.17：把"查无结果 / 暂无结果"这类占位条目剔掉，只看真实轨迹
+                        if (isPlaceholderTrace(ctx)) continue
+                        traces += Trace(o.optString("ftime", o.optString("time")), ctx)
+                    }
+                }
+                // v4.17：**不再**用 condition 判空。实测存在 condition=F00 却带 12 条真实轨迹的响应，
+                // 所以一律以 data 里有没有真实轨迹为准；没有就算这次没拿到，进入下一次重试。
+                if (traces.isEmpty()) { emptyHits++; continue }
+
+                val ischeck = json.optString("ischeck")                  // E4：签收正向证据
+                val state = json.optString("state", "")
+                val stateText = stateTextOf(state, traces, ischeck)
+                val res = Result(true, prettyName(com.code, com.name), stateText, traces, "ok")
+                synchronized(cache) { cache[cacheKey] = System.currentTimeMillis() to res }
+                return res
             }
-
-            val json = runCatching { JSONObject(q) }.getOrNull()
-            if (json == null) { serverErr++; continue }             // V4-25：响应非 JSON（接口异常，非限流）
-            if (json.optString("status") != "200") {
-                serverErr++                                         // V4-25：服务端错误（如公司代码无效）
-                continue
-            }
-            // E4：condition 以 F 开头即无结果（不只认 F00）
-            if (json.optString("condition").startsWith("F", ignoreCase = true)) continue
-
-            val respNu = json.optString("nu").replace(" ", "")
-            if (respNu.isNotBlank() && !respNu.equals(nu, ignoreCase = true)) continue
-            val respCom = json.optString("com")
-            if (respCom.isNotBlank() && respCom != com.code) continue
-
-            val arr = json.optJSONArray("data") ?: continue
-            if (arr.length() == 0) continue
-
-            val traces = mutableListOf<Trace>()
-            for (i in 0 until arr.length()) {
-                val o = arr.optJSONObject(i) ?: continue           // E7：类型防护
-                traces += Trace(o.optString("ftime", o.optString("time")), o.optString("context"))
-            }
-            if (traces.isEmpty()) continue
-            if (traces.any { it.context.contains("查无结果") || it.context.contains("暂无结果") }) continue
-
-            val ischeck = json.optString("ischeck")                  // E4：签收正向证据
-            val state = json.optString("state", "")
-            val stateText = stateTextOf(state, traces, ischeck)
-            val res = Result(true, prettyName(com.code, com.name), stateText, traces, "ok")
-            synchronized(cache) { cache[cacheKey] = System.currentTimeMillis() to res }
-            return res
         }
 
         // ---- 3) 失败文案（E6：区分限流 / 网络 / 查不到） ----
         val fail = when {
             limited > 0 && networkFailures == 0 && serverErr == 0 ->
                 "查询过于频繁，被限流了，请稍等几秒再试"
-            networkFailures > 0 && limited == 0 && serverErr == 0 ->
+            networkFailures > 0 && limited == 0 && serverErr == 0 && emptyHits == 0 ->
                 "网络异常，请检查网络后重试"
-            serverErr > 0 && networkFailures == 0 && limited == 0 ->
+            serverErr > 0 && networkFailures == 0 && limited == 0 && emptyHits == 0 ->
                 "快递接口暂时不可用（或该单号不支持查询），请稍后再试"
-            limited + networkFailures + serverErr >= candidates.size ->
-                "网络异常或查询接口繁忙，请稍等几秒再试"
-            else ->
-                // v4.16：能走到这里说明接口**正常返回**了，只是数据源里没有这条记录
-                // （condition=F00 / "查无结果"）——这跟网络故障、接口故障是两码事，文案必须分开讲，
-                // 否则用户会以为 App 坏了。实测：换个公司编码重试同样是 F00，所以不是编码问题。
-                "快递100 免费数据源里没有这条单号的记录（已尝试：${candidates.joinToString("、") { it.name }}）。\n" +
+            emptyHits > 0 ->
+                // v4.17：接口正常、也已经重试过，但数据源确实没给数据。
+                // 和网络/接口故障分开讲，否则用户会以为 App 坏了。
+                "快递100 免费数据源暂时没有这条单号的记录" +
+                    "（已重试 ${emptyHits} 次，试过：${candidates.joinToString("、") { it.name }}）。\n" +
                     "常见原因：① 刚揽收，物流还没同步　② 该快递公司未被免费源收录　③ 单号有误。\n" +
                     "可以稍后再试，或点下方「去快递100 网页查」看官方结果"
+            else ->
+                "网络异常或查询接口繁忙，请稍等几秒再试"
         }
         val result = Result(false, candidates.first().name, "", emptyList(), fail)
         synchronized(cache) { cache[cacheKey] = System.currentTimeMillis() to result }   // E12：失败短缓存
@@ -265,7 +312,7 @@ object ExpressApi {
         val t = traces.firstOrNull()?.context ?: ""
         return when {
             t.contains("拒签") -> "拒签"
-            t.contains("签收") || t.contains("妥投") -> "已签收 ✔"
+            t.contains("签收") || t.contains("妥投") || t.contains("已投递") -> "已签收 ✔"   // v4.17：补"已投递"
             t.contains("派送") || t.contains("派件") -> "派件中 🚚"
             t.contains("运输") || t.contains("到达") || t.contains("中转") -> "运输中"
             t.contains("揽收") || t.contains("收件") -> "已揽收"
