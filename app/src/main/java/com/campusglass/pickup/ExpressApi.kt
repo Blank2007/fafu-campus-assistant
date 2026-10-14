@@ -54,8 +54,17 @@ object ExpressApi {
 
     private data class Com(val code: String, val name: String)
 
+    /**
+     * UI 展示用的「能自动识别的常见快递」清单（v4.16）。
+     *
+     * ⚠️ 这不是白名单 —— [query] 还会用快递100 的 autoComNum 识别更多公司；
+     * 这里列的是离线前缀表 + 常见代码表里认识的名字，给用户一个"大概覆盖哪些"的概念，
+     * 免得查不到时以为是 App 坏了。
+     */
+    val SUPPORTED_COURIERS: List<String> = CODE_NAMES.values.distinct()
+
     const val SUPPORTED_HINT =
-        "（个别小快递/新单号可能查不到，识别不了时会提示）"
+        "免费接口覆盖主流快递；个别小快递、刚揽收未同步的单号可能暂时查不到"
 
     private fun prettyName(code: String, raw: String): String =
         raw.ifBlank { CODE_NAMES[code] ?: code }
@@ -150,8 +159,14 @@ object ExpressApi {
             if (idx > 0) delay(400)                                  // 可取消（E2）
 
             val remain = (deadline - System.currentTimeMillis()).coerceIn(1_000, TOTAL_BUDGET_MS)   // V4-8
+            // v4.16：参数与快递100 网页端（m.kuaidi100.com/result.jsp）完全对齐（id/valicode/temp），
+            // 尽量命中它同一套缓存；temp 用随机数是为了绕开 CDN 缓存。
             val q = try {
-                get("https://www.kuaidi100.com/query?type=${com.code}&postid=$encoded&phone=", remain)
+                get(
+                    "https://www.kuaidi100.com/query?type=${com.code}&postid=$encoded" +
+                        "&id=1&valicode=&temp=${Math.random()}&phone=",
+                    remain,
+                )
             } catch (e: IOException) {
                 if (e.message?.contains("403") == true) limited++ else networkFailures++
                 continue
@@ -206,8 +221,12 @@ object ExpressApi {
             limited + networkFailures + serverErr >= candidates.size ->
                 "网络异常或查询接口繁忙，请稍等几秒再试"
             else ->
-                "没查到该单号的轨迹（尝试了：${candidates.joinToString("、") { it.name }}）。" +
-                    "可能是单号有误、刚揽收未同步或小快递公司，稍后再试"
+                // v4.16：能走到这里说明接口**正常返回**了，只是数据源里没有这条记录
+                // （condition=F00 / "查无结果"）——这跟网络故障、接口故障是两码事，文案必须分开讲，
+                // 否则用户会以为 App 坏了。实测：换个公司编码重试同样是 F00，所以不是编码问题。
+                "快递100 免费数据源里没有这条单号的记录（已尝试：${candidates.joinToString("、") { it.name }}）。\n" +
+                    "常见原因：① 刚揽收，物流还没同步　② 该快递公司未被免费源收录　③ 单号有误。\n" +
+                    "可以稍后再试，或点下方「去快递100 网页查」看官方结果"
         }
         val result = Result(false, candidates.first().name, "", emptyList(), fail)
         synchronized(cache) { cache[cacheKey] = System.currentTimeMillis() to result }   // E12：失败短缓存

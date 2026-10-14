@@ -46,6 +46,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -74,6 +75,7 @@ fun PickupScreen() {
     var showClearConfirm by rememberSaveable { mutableStateOf(false) }   // E9/V4-20
     var expanded by rememberSaveable { mutableStateOf(false) }           // v4.15：轨迹展开
     var onlyUnsigned by rememberSaveable { mutableStateOf(false) }       // v4.15：只看未签收
+    var showSupported by rememberSaveable { mutableStateOf(false) }      // v4.16：支持清单展开
 
     // E1：读写统一 history2；一次性迁移旧键。v4.15 起同一条记录里还存公司与状态。
     var history by remember {
@@ -199,6 +201,24 @@ fun PickupScreen() {
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                 )
+                // v4.16：把「支持哪些快递」直接摆在说明旁边（默认收起，点开看全）
+                TextButton(
+                    onClick = { showSupported = !showSupported },
+                    contentPadding = PaddingValues(0.dp),
+                ) {
+                    Text(
+                        if (showSupported) "▾ 收起支持清单（${ExpressApi.SUPPORTED_COURIERS.size} 家）"
+                        else "▸ 支持哪些快递？",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                if (showSupported) {
+                    Text(
+                        ExpressApi.SUPPORTED_COURIERS.joinToString("、"),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                }
             }
         }
 
@@ -282,8 +302,15 @@ fun PickupScreen() {
                             )
                             if (fail) {
                                 // v4.15：失败不再只能干瞪眼，直接给个重试
-                                OutlinedButton(onClick = { doQuery(resultNo, force = true) }) {
-                                    Text("重试")
+                                // v4.16：再加「去快递100 网页查」——免费数据源没收录该单号时，
+                                //        网页端能看到官方结果（也能订阅后续更新），是目前唯一可靠的兜底
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(onClick = { doQuery(resultNo, force = true) }) {
+                                        Text("重试")
+                                    }
+                                    OutlinedButton(onClick = { openKuaidi100Web(context, resultNo) }) {
+                                        Text("去快递100 网页查")
+                                    }
                                 }
                             }
                         } else {
@@ -466,5 +493,25 @@ private fun copyToClipboard(context: Context, text: String) {
     }
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
         Toast.makeText(context, "已复制单号", Toast.LENGTH_SHORT).show()
+    }
+}
+
+/**
+ * 用系统浏览器打开快递100 的结果页（v4.16）。
+ *
+ * 为什么要它：免费 JSON 接口只覆盖它自己收录的数据，遇到没收录的单号一律回"查无结果"。
+ * 网页端能看到官方结果、也能订阅后续更新，所以作为兜底入口给用户。
+ * 用浏览器而不是 WebView，避免把 Cookie/UA 折腾进 App（也符合项目"零后端、少权限"的取向）。
+ */
+private fun openKuaidi100Web(context: Context, nu: String) {
+    val url = "https://m.kuaidi100.com/result.jsp?nu=" +
+        java.net.URLEncoder.encode(nu, "UTF-8")
+    runCatching {
+        context.startActivity(
+            android.content.Intent(android.content.Intent.ACTION_VIEW, url.toUri())
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+    }.onFailure {
+        Toast.makeText(context, "没能打开浏览器", Toast.LENGTH_SHORT).show()
     }
 }

@@ -170,4 +170,27 @@ class ExpressLogicTest {
         assertTrue(ExpressApi.guessCompanies("ZZ1234567890").isEmpty()) // 未知前缀
         assertTrue(ExpressApi.guessCompanies("").isEmpty())
     }
+
+    // ---------------- 支持清单（v4.16，UI 展示用） ----------------
+
+    @Test
+    fun supportedCouriers_isNonEmptyDistinctAndCoversMajorOnes() {
+        val list = ExpressApi.SUPPORTED_COURIERS
+        assertTrue(list.size >= 10)
+        assertEquals(list.size, list.distinct().size)          // 不能有重复项
+        assertTrue(list.none { it.isBlank() })
+        for (must in listOf("顺丰速运", "圆通速递", "中通快递", "申通快递", "韵达速递", "极兔速递", "京东物流")) {
+            assertTrue("支持清单缺少 $must", list.contains(must))
+        }
+    }
+
+    @Test
+    fun supportedCouriers_matchPrefixTableNames() {
+        // 清单必须覆盖离线前缀表里所有能自动识别的公司，否则 UI 会漏报
+        for (nu in listOf("SF1234567890", "YT0000000000", "ZT1234567890", "ST1234567890",
+                          "YD1234567890", "JT1234567890", "JD1234567890", "DBL123456789", "EMS123456789")) {
+            val g = ExpressApi.guessCompanies(nu)
+            assertTrue("清单缺少 $g", g.all { ExpressApi.SUPPORTED_COURIERS.contains(it) })
+        }
+    }
 }
