@@ -92,6 +92,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
+    "v4.15.sljzy · 2026-10-14" to "快递功能完善：查询历史升级为「单号+快递公司+状态+时间」并可只看未签收；长轨迹默认折叠为最近 3 条可展开；结果卡支持一键复制单号、失败可直接重试；输入时离线识别快递公司；修掉「取消上一个查询后正在查询状态被旧任务抹掉」的竞态。署名补接棒方模型名",
     "v4.14.sljzy · 2026-10-14" to "校历事件同步到课表：课表「假期提示栏」升级为「校历提示栏」，按周展示全部校历事件（师生报到/老生上课/学生补考/新生报到/新生上课/中秋/国庆/两次调休上课/新生军训/元旦/寒假/春节/元宵），假期高亮其余分类图标标注，并提示当天事件；校历数据统一为 HolidayData 单一数据源，首页校历卡片与课表提示栏同源渲染",
     "v4.13.sljzy · 2026-10-14 00:40" to "接棒维护版：更新验签支持密钥轮换过渡（公钥列表，保证老用户始终能一键直接安装）；修复 ContextWrapper 解包（系统栏图标深浅静默失效）；清理死代码与未必要断言、恒假判断；注释/文档勘误（targetSdk、陈旧注释、Release 资产名）；补齐 gradlew 与可移植 build-apk.sh；作者署名补接棒方并保留前手 Xiaomi-Mimo-V2.6-Pro 贡献",
     "v4.12.sljzy · 2026-10-12 22:25" to "删除失效的课表微信链接，改为标注：下方教务系统可查课表、微信「教务系统」公众号也可查",
@@ -389,7 +390,7 @@ fun SettingsScreen() {
                     )
                     Text(
                         "全部代码由 AI 助手独立编写；需求设计、提示词与测试反馈由 Void_Blank 提供。人出想法，AI 写代码。\n" +
-                            "代码编写：Xiaomi-Mimo-V2.6-Pro（v1.0~v4.12）· WorkBuddy AI（v4.13 起接棒维护）",
+                            "代码编写：Xiaomi-Mimo-V2.6-Pro（v1.0~v4.12）· WorkBuddy AI(DeepSeek-V4.1-Flash)（v4.13 起接棒维护）",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     if (showUpdate) {

@@ -78,6 +78,32 @@ object ExpressApi {
         }
     }
 
+    /**
+     * 离线猜候选快递公司（**不发任何网络请求**），用于输入框下方的实时提示。
+     * 与 [query] 内部的候选生成同源（都走 [prefixCandidates]），避免两处规则跑偏。
+     */
+    fun guessCompanies(rawNu: String): List<String> =
+        prefixCandidates(normalize(rawNu)).map { it.name }
+
+    /**
+     * 按单号前缀与位数规则猜候选公司（纯本地规则，确定性）。
+     * - 前缀表：[PREFIX_MAP]
+     * - 纯数字且 10~13 位：补一个"邮政包裹"（邮政单号没有字母前缀，只能按位数兜）
+     */
+    private fun prefixCandidates(nu: String): List<Com> {
+        if (nu.length < 4) return emptyList()          // 太短必然误报，直接不给
+        val upper = nu.uppercase()
+        val out = mutableListOf<Com>()
+        PREFIX_MAP.forEach { (p, pair) ->
+            val (code, name) = pair
+            if (upper.startsWith(p) && out.none { it.code == code }) out += Com(code, name)
+        }
+        if (nu.length in 10..13 && nu.all { it.isDigit() } && out.none { it.code == "youzhengguonei" }) {
+            out += Com("youzhengguonei", "邮政包裹")
+        }
+        return out
+    }
+
     suspend fun query(rawNu: String, force: Boolean = false): Result {
         val nu = normalize(rawNu)
         if (nu.isBlank()) return Result(false, "未知", "", emptyList(), "请先输入快递单号")
@@ -110,16 +136,7 @@ object ExpressApi {
                 }
             }
         }
-        val upper = nu.uppercase()
-        PREFIX_MAP.forEach { (p, pair) ->
-            val (code, name) = pair
-            if (upper.startsWith(p) && candidates.none { it.code == code }) {
-                candidates += Com(code, name)
-            }
-        }
-        if (nu.length in 10..13 && nu.all { it.isDigit() } && candidates.none { it.code == "youzhengguonei" }) {
-            candidates += Com("youzhengguonei", "邮政包裹")
-        }
+        prefixCandidates(nu).forEach { c -> if (candidates.none { it.code == c.code }) candidates += c }
         if (candidates.isEmpty()) {
             return Result(false, "未知", "", emptyList(), "没识别出快递公司，请核对单号")
         }

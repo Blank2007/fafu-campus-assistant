@@ -14,8 +14,8 @@ android {
         // C-2（审查 v4.10）：targetSdk 收敛到 36（API 37 编译环境非 REL，行为变更未经真机回归）
         minSdk = 31
         targetSdk = 36
-        versionCode = 78
-        versionName = "4.14.sljzy"
+        versionCode = 79
+        versionName = "4.15.sljzy"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -36,10 +36,17 @@ android {
                 "DebugProbesKt.bin",          // kotlinx-coroutines 调试探针，Release 不需要
                 "META-INF/*.version",
                 "kotlin/**",                  // Kotlin builtins 元数据（未用反射）
-                "META-INF/services/m5",
-                "META-INF/services/tp",
             )
         }
+        // ⚠️ v4.15：**不要**去排除 `META-INF/services/*`。
+        // 这里原本有两行 `META-INF/services/m5` / `META-INF/services/tp`（C-3 加的"瘦身"），
+        // 实测**从未生效**：R8 会把 kotlinx-coroutines 的 ServiceLoader 描述符改名，
+        // 文件名是混淆后的**接口名**，每次构建都可能不同（v4.14 是 m5+up，v4.15 是 m5+tp），
+        // 按名字写死根本匹配不上，所以 APK 里一直留着它们。
+        // 更要紧的是：这两个描述符正是 `Dispatchers.Main` 能被 ServiceLoader 找到的原因，
+        // 一旦有人把这条排除"修好"（例如改成 `META-INF/services/*`），App 会直接起不来。
+        // 故删掉那两行死配置，留此说明。 / Do NOT exclude META-INF/services/*: those are
+        // R8-renamed kotlinx-coroutines ServiceLoader descriptors that back Dispatchers.Main.
     }
 
     // U2 正式签名：在项目根放 keystore.properties（勿提交！已 gitignore）：

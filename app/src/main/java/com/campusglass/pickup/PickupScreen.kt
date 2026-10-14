@@ -1,8 +1,11 @@
 package com.campusglass.pickup
 
+import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Build
 import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -41,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -48,9 +52,13 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** 轨迹超过这个条数就先折叠，只显示最近的几条 */
+private const val COLLAPSE_AT = 3
+
 /**
- * 快递查询 v5（审查 E1-E12 修复）：
- * 历史读写统一 history2（复活 bug 根治）· 查询可取消/防串号 · 失败样式 · 结果置顶 · 危险操作确认。
+ * 快递查询 v6（v4.15）：
+ * 历史结构化（单号+公司+状态+时间，可只看未签收）· 长轨迹折叠 · 复制单号 · 失败可重试 ·
+ * 输入时离线识别快递公司 · 修掉"取消查询后 loading 被旧任务抹掉"的竞态。
  */
 @Composable
 fun PickupScreen() {
@@ -64,23 +72,26 @@ fun PickupScreen() {
     var resultNo by rememberSaveable { mutableStateOf("") }
     var queryJob by remember { mutableStateOf<Job?>(null) }            // E2：可取消
     var showClearConfirm by rememberSaveable { mutableStateOf(false) }   // E9/V4-20
+    var expanded by rememberSaveable { mutableStateOf(false) }           // v4.15：轨迹展开
+    var onlyUnsigned by rememberSaveable { mutableStateOf(false) }       // v4.15：只看未签收
 
-    // E1：读写统一 history2；一次性迁移旧键
+    // E1：读写统一 history2；一次性迁移旧键。v4.15 起同一条记录里还存公司与状态。
     var history by remember {
         mutableStateOf(
             if (prefs.contains("history2")) {
-                prefs.getString("history2", "")?.split("\n")?.filter { it.isNotBlank() }.orEmpty()
+                ExpressHistory.parse(prefs.getString("history2", ""))
             } else {
                 val old = prefs.getStringSet("history", emptySet())?.toList().orEmpty()
-                prefs.edit().putString("history2", old.joinToString("\n")).remove("history").apply()
-                old
+                val entries = old.map { ExpressHistory.Entry(it) }
+                prefs.edit().putString("history2", ExpressHistory.encode(entries)).remove("history").apply()
+                entries
             }
         )
     }
 
-    fun saveHistory(list: List<String>) {
+    fun saveHistory(list: List<ExpressHistory.Entry>) {
         history = list
-        prefs.edit().putString("history2", list.joinToString("\n")).apply()   // E1
+        prefs.edit().putString("history2", ExpressHistory.encode(list)).apply()   // E1
     }
 
     fun doQuery(nuRaw: String, force: Boolean = false) {
@@ -93,25 +104,47 @@ fun PickupScreen() {
             Toast.makeText(context, "上一个查询还在进行中，已为你取消并重新查询", Toast.LENGTH_SHORT).show()
         }
         queryJob?.cancel()                                                 // E2：取消上一个
-        saveHistory((listOf(nu) + history.filter { !it.equals(nu, true) }).take(10))
+        // v4.15：先置顶入历史（公司与状态留空 → upsert 会保留上次查到的值，不会冲掉）
+        saveHistory(ExpressHistory.upsert(history, ExpressHistory.Entry(nu = nu, time = System.currentTimeMillis())))
         loading = true
         resultNo = nu
         queryJob = scope.launch {
             val r = try {
                 withContext(Dispatchers.IO) { ExpressApi.query(nu, force) }
             } catch (e: CancellationException) {
-                loading = false
-                return@launch       // E2/V4-20：取消直接退出，保留上一次结果
+                // v4.15 修竞态：这里**不能**把 loading 置回 false。
+                // 被取消的旧任务总是晚于新任务执行到这一句（新任务在同一个主线程 tick 里
+                // 已经设好 loading=true），一置就正好把新任务的"查询中"状态抹掉，
+                // 表现为转圈提前消失、按钮提前可用。取消按钮那条路径会自己重置 loading。
+                return@launch
             }
             if (resultNo == nu) {                                         // E2：防串号
                 result = r
                 loading = false
+                // v4.15：成功时把公司与状态回填到历史（失败则保留原值，不写入误导信息）
+                saveHistory(
+                    ExpressHistory.upsert(
+                        history,
+                        ExpressHistory.Entry(
+                            nu = nu,
+                            com = if (r.ok) r.comName else "",
+                            state = if (r.ok) r.stateText else "",
+                            time = System.currentTimeMillis(),
+                        ),
+                    )
+                )
             }
         }
     }
 
     val listState = rememberLazyListState()
-    LaunchedEffect(result) { if (result != null) listState.animateScrollToItem(0) }   // E8
+    LaunchedEffect(result) {
+        expanded = false                                                  // v4.15：新结果默认折叠
+        if (result != null) listState.animateScrollToItem(0)               // E8
+    }
+
+    // v4.15：输入时离线识别候选公司（不发网络请求），减少无效查询
+    val guessed = remember(trackingNo) { ExpressApi.guessCompanies(trackingNo) }
 
     LazyColumn(
         Modifier.fillMaxSize().imePadding(),
@@ -128,6 +161,14 @@ fun PickupScreen() {
                     singleLine = true,
                     placeholder = { Text("粘贴或输入快递单号") },
                 )
+                // v4.15：离线识别候选公司（不发网络请求），减少无效查询
+                if (guessed.isNotEmpty()) {
+                    Text(
+                        "识别为：${guessed.joinToString("、")}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { doQuery(trackingNo) },
@@ -217,11 +258,17 @@ fun PickupScreen() {
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
-                                    "运单号：$resultNo　·　共 ${r.traces.size} 条轨迹（全部显示）",
+                                    "运单号：$resultNo　·　共 ${r.traces.size} 条轨迹",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,          // v4.15：长单号不撑破行
                                 )
-                                TextButton(onClick = { doQuery(resultNo, force = true) }) {   // E12
+                                TextButton(onClick = { copyToClipboard(context, resultNo) }) {   // v4.15
+                                    Text("复制单号", style = MaterialTheme.typography.labelSmall)
+                                }
+                                TextButton(onClick = { doQuery(resultNo, force = true) }) {      // E12
                                     Text("忽略缓存重查", style = MaterialTheme.typography.labelSmall)
                                 }
                             }
@@ -233,15 +280,33 @@ fun PickupScreen() {
                                 color = if (fail) MaterialTheme.colorScheme.onErrorContainer
                                 else MaterialTheme.colorScheme.onSurface,
                             )
+                            if (fail) {
+                                // v4.15：失败不再只能干瞪眼，直接给个重试
+                                OutlinedButton(onClick = { doQuery(resultNo, force = true) }) {
+                                    Text("重试")
+                                }
+                            }
                         } else {
-                            r.traces.forEachIndexed { i, t ->
+                            // v4.15：轨迹长时先折叠，只显示最近 COLLAPSE_AT 条
+                            val collapsible = r.traces.size > COLLAPSE_AT
+                            val shown = if (collapsible && !expanded) r.traces.take(COLLAPSE_AT) else r.traces
+                            shown.forEachIndexed { i, t ->
                                 Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                     Text(t.time, style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.primary)
                                     Text(t.context, style = MaterialTheme.typography.bodySmall,
                                         fontWeight = if (i == 0) FontWeight.Bold else FontWeight.Normal)
                                 }
-                                if (i != r.traces.size - 1) HorizontalDivider()
+                                if (i != shown.size - 1) HorizontalDivider()
+                            }
+                            if (collapsible) {
+                                TextButton(onClick = { expanded = !expanded }) {
+                                    Text(
+                                        if (expanded) "收起轨迹"
+                                        else "展开全部 ${r.traces.size} 条轨迹",
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
                             }
                         }
                     }
@@ -249,9 +314,12 @@ fun PickupScreen() {
             }
         }
 
-        // ---- 历史（E9：删除有描述；清空有确认） ----
+        // ---- 历史（E9：删除有描述；清空有确认。v4.15：带公司/状态/时间 + 只看未签收） ----
         if (history.isNotEmpty()) {
             item {
+                val now = System.currentTimeMillis()
+                val shownHistory = if (onlyUnsigned) history.filter { !it.signed } else history
+                val unsignedCount = history.count { !it.signed }
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(
@@ -262,22 +330,56 @@ fun PickupScreen() {
                             Text("查询历史", style = MaterialTheme.typography.titleSmall)
                             TextButton(onClick = { showClearConfirm = true }) { Text("清空") }   // E9
                         }
-                        history.forEach { nu ->
+                        if (unsignedCount in 1 until history.size) {                 // 有已签收的才值得筛
+                            TextButton(onClick = { onlyUnsigned = !onlyUnsigned }) {
+                                Text(
+                                    if (onlyUnsigned) "✔ 只看未签收（$unsignedCount）"
+                                    else "只看未签收（$unsignedCount）",
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                        if (shownHistory.isEmpty()) {
+                            Text(
+                                "都签收啦 🎉",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            )
+                        }
+                        shownHistory.forEach { e ->
+                            val sub = ExpressHistory.subtitle(e, now)
                             Row(
                                 Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                TextButton(onClick = {
-                                    trackingNo = nu
-                                    doQuery(nu)
-                                }) { Text(nu) }
+                                Column(
+                                    Modifier.weight(1f).clickable {
+                                        trackingNo = e.nu
+                                        doQuery(e.nu)
+                                    }.padding(vertical = 4.dp),
+                                ) {
+                                    Text(
+                                        if (e.signed) "✔ ${e.nu}" else e.nu,             // 已签收一眼可见
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                    )
+                                    if (sub.isNotBlank()) {
+                                        Text(
+                                            sub,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
                                 IconButton(
-                                    onClick = { saveHistory(history - nu) },
+                                    onClick = { saveHistory(history - e) },
                                 ) {
                                     Icon(
                                         Icons.Filled.Close,
-                                        contentDescription = "删除单号 $nu",          // E9
+                                        contentDescription = "删除单号 ${e.nu}",          // E9
                                         tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                                     )
                                 }
@@ -347,5 +449,22 @@ fun PickupScreen() {
             },
             dismissButton = { TextButton(onClick = { showClearConfirm = false }) { Text("取消") } },
         )
+    }
+}
+
+/**
+ * 复制到剪贴板。
+ * Android 13（API 33）起系统会自己弹一个"已复制"提示，我们再弹一次就变成两条，所以低版本才自己弹。
+ */
+private fun copyToClipboard(context: Context, text: String) {
+    runCatching {
+        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("快递单号", text))
+    }.onFailure {
+        Toast.makeText(context, "复制失败", Toast.LENGTH_SHORT).show()
+        return
+    }
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        Toast.makeText(context, "已复制单号", Toast.LENGTH_SHORT).show()
     }
 }
