@@ -141,6 +141,15 @@ object WidgetNav {
 }
 
 /**
+ * 悬浮底栏为内容区预留的高度（v5.0）。
+ *
+ * 底栏实际高度 ≈ 图标 24dp + 文字 14dp + 内外纵向 padding 38dp ≈ 76dp，
+ * 再加底栏自身的外边距 10dp，取 92dp 留一点余量。
+ * 文案放大（设置页「课表字号」选大）时底栏会略高，余量可覆盖。
+ */
+private val BOTTOM_BAR_RESERVED = 92.dp
+
+/**
  * 逐层解包 ContextWrapper 找到宿主 Activity。
  * Compose 的 LocalContext 通常就是 Activity，但在被包装的场景下（部分 ROM / 宿主容器）
  * 直接强转会失败，导致系统栏图标深浅设置静默失效（V4-23 的原始意图）。
@@ -288,6 +297,11 @@ fun CampusGlassApp() {
                         .fillMaxSize()
                         .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))
                         .padding(padding)
+                        // v5.0：悬浮底栏是 overlay（Scaffold contentWindowInsets 已清零），
+                        // 内容区若不预留底部空间，滚动到底会被底栏遮住最后一项。
+                        // 这里统一预留底栏高度 + 导航栏 inset，5 个页面一起生效。
+                        .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
+                        .padding(bottom = BOTTOM_BAR_RESERVED)
                         .nestedScroll(scrollConn)
                 ) {
                     AnimatedContent(

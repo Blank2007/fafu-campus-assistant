@@ -78,7 +78,7 @@ object HolidayData {
         CalendarEvent(
             "调休上课（周日上10/6周二的课）",
             LocalDate.of(2026, 9, 20), LocalDate.of(2026, 9, 20), EventKind.MAKEUP,
-            note = "9/20（周日）上 10/6（周二）的课程",
+            note = "按教务处调课安排执行",
         ),
         CalendarEvent("中秋节放假", LocalDate.of(2026, 9, 25), LocalDate.of(2026, 9, 27), EventKind.HOLIDAY, note = "共3天"),
 
@@ -87,7 +87,7 @@ object HolidayData {
         CalendarEvent(
             "调休上课（周六上10/7周三的课）",
             LocalDate.of(2026, 10, 10), LocalDate.of(2026, 10, 10), EventKind.MAKEUP,
-            note = "10/10（周六）上 10/7（周三）的课程",
+            note = "按教务处调课安排执行",
         ),
         CalendarEvent("新生军训", LocalDate.of(2026, 10, 26), LocalDate.of(2026, 11, 8), EventKind.MILITARY),
 
@@ -95,7 +95,7 @@ object HolidayData {
         CalendarEvent(
             "南平校区运动会",
             LocalDate.of(2026, 11, 9), LocalDate.of(2026, 11, 10), EventKind.ACTIVITY,
-            note = "南平校区运动会（11/9-11/10）。运动会期间课程与作息可能有调整，请注意查看学院/教务通知。",
+            note = "运动会期间课程与作息可能有调整，请注意查看学院/教务通知。",
         ),
 
         // —— 2027 年 1 月 ——

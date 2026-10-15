@@ -14,8 +14,8 @@ android {
         // C-2（审查 v4.10）：targetSdk 收敛到 36（API 37 编译环境非 REL，行为变更未经真机回归）
         minSdk = 31
         targetSdk = 36
-        versionCode = 84
-        versionName = "4.20.sljzy"
+        versionCode = 85
+        versionName = "5.0.nmyx"
         vectorDrawables.useSupportLibrary = true
     }
 
