@@ -2,6 +2,7 @@ package com.campusglass.update
 
 import android.content.Context
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
@@ -34,8 +35,8 @@ object UpdatePolicy {
     var mode by mutableStateOf(Mode.WHEN_OPEN)
         private set
 
-    /** 上次检查时间（Compose 可观察） */
-    var lastCheckMs by mutableStateOf(0L)
+    /** 上次检查时间（Compose 可观察；用 Long 专用状态避免装箱） */
+    var lastCheckMs by mutableLongStateOf(0L)
         private set
 
     /** 已跳过的版本号（Compose 可观察，清除后文案即时消失） */

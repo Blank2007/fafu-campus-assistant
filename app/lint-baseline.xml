@@ -30,7 +30,7 @@
         errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="build.gradle.kts"
-            line="125"
+            line="132"
             column="20"/>
     </issue>
 
@@ -41,7 +41,7 @@
         errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="build.gradle.kts"
-            line="126"
+            line="133"
             column="20"/>
     </issue>
 
@@ -81,7 +81,7 @@
         errorLine2="                                   ~~~~~">
         <location
             file="src/main/java/com/campusglass/MainActivity.kt"
-            line="319"
+            line="322"
             column="36"/>
     </issue>
 
@@ -125,7 +125,7 @@
         errorLine2="                                                                      ~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="292"
+            line="302"
             column="71"/>
     </issue>
 
@@ -136,7 +136,7 @@
         errorLine2="                                                                      ~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="301"
+            line="311"
             column="71"/>
     </issue>
 
@@ -147,7 +147,7 @@
         errorLine2="                                                                              ~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="307"
+            line="317"
             column="79"/>
     </issue>
 
@@ -158,7 +158,7 @@
         errorLine2="                                                                        ~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="323"
+            line="333"
             column="73"/>
     </issue>
 
@@ -169,7 +169,7 @@
         errorLine2="                                                                         ~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="535"
+            line="585"
             column="74"/>
     </issue>
 
@@ -180,7 +180,7 @@
         errorLine2="                                                                         ~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="536"
+            line="586"
             column="74"/>
     </issue>
 
@@ -655,29 +655,29 @@
         errorLine2="                                                                                         ~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/home/HomeScreen.kt"
-            line="417"
+            line="412"
             column="90"/>
     </issue>
 
     <issue
         id="UseKtx"
         message="Use the KTX extension function `SharedPreferences.edit` instead?"
-        errorLine1="                prefs.edit().putString(&quot;history2&quot;, old.joinToString(&quot;\n&quot;)).remove(&quot;history&quot;).apply()"
+        errorLine1="                prefs.edit().putString(&quot;history2&quot;, ExpressHistory.encode(entries)).remove(&quot;history&quot;).apply()"
         errorLine2="                ~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/pickup/PickupScreen.kt"
-            line="75"
+            line="88"
             column="17"/>
     </issue>
 
     <issue
         id="UseKtx"
         message="Use the KTX extension function `SharedPreferences.edit` instead?"
-        errorLine1="        prefs.edit().putString(&quot;history2&quot;, list.joinToString(&quot;\n&quot;)).apply()   // E1"
+        errorLine1="        prefs.edit().putString(&quot;history2&quot;, ExpressHistory.encode(list)).apply()   // E1"
         errorLine2="        ~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/pickup/PickupScreen.kt"
-            line="83"
+            line="96"
             column="9"/>
     </issue>
 
@@ -688,7 +688,7 @@
         errorLine2="                                        ~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/pickup/PickupScreen.kt"
-            line="303"
+            line="432"
             column="41"/>
     </issue>
 
@@ -831,7 +831,7 @@
         errorLine2="                                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="368"
+            line="378"
             column="72"/>
     </issue>
 
@@ -842,7 +842,7 @@
         errorLine2="                                                                             ~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="491"
+            line="541"
             column="78"/>
     </issue>
 
@@ -853,7 +853,7 @@
         errorLine2="                            ~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="916"
+            line="883"
             column="29"/>
     </issue>
 
@@ -864,7 +864,7 @@
         errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="932"
+            line="899"
             column="49"/>
     </issue>
 
@@ -875,7 +875,7 @@
         errorLine2="                                        ~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="1025"
+            line="992"
             column="41"/>
     </issue>
 
@@ -886,7 +886,7 @@
         errorLine2="                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/campusglass/ui/settings/SettingsScreen.kt"
-            line="1039"
+            line="1006"
             column="45"/>
     </issue>
 
@@ -1064,6 +1064,50 @@
             file="src/main/java/com/campusglass/UpdateCleanupReceiver.kt"
             line="18"
             column="17"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit().putString(&quot;autoCheckMode&quot;, m.name).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/update/UpdatePolicy.kt"
+            line="58"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit().putLong(&quot;lastCheckMs&quot;, at).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/update/UpdatePolicy.kt"
+            line="63"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit().putString(&quot;skippedTag&quot;, tag).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/update/UpdatePolicy.kt"
+            line="69"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs(c).edit().remove(&quot;skippedTag&quot;).apply()"
+        errorLine2="        ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/campusglass/update/UpdatePolicy.kt"
+            line="74"
+            column="9"/>
     </issue>
 
     <issue
