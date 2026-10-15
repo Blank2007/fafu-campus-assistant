@@ -1,6 +1,9 @@
 package com.campusglass.update
 
 import android.content.Context
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 
 /**
  * 启动时自动检查更新的用户偏好（设置页可改，持久化）。
@@ -13,6 +16,10 @@ import android.content.Context
  * 另外记录：
  *  - lastCheckMs：上次检查时间（用于节流，避免频繁冷启动反复请求 GitHub）
  *  - skippedTag：用户选择「本次跳过」的版本号（同一版本不再重复打扰）
+ *
+ * ⚠️ 状态一律用 Compose 的 [mutableStateOf] 暴露：
+ * v4.18 初版用的是普通 `@Volatile var` 字段，Compose 在首次组合时读一次就缓存下来，
+ * 点开关**界面不会刷新**（要退出设置页再进来才变）。改用 Compose 状态后点击即时生效。
  */
 object UpdatePolicy {
 
@@ -23,13 +30,16 @@ object UpdatePolicy {
 
     private fun prefs(c: Context) = c.getSharedPreferences("update", Context.MODE_PRIVATE)
 
-    @Volatile var mode: Mode = Mode.WHEN_OPEN
+    /** 当前模式（Compose 可观察，改动即时触发重组） */
+    var mode by mutableStateOf(Mode.WHEN_OPEN)
         private set
 
-    @Volatile var lastCheckMs: Long = 0L
+    /** 上次检查时间（Compose 可观察） */
+    var lastCheckMs by mutableStateOf(0L)
         private set
 
-    @Volatile var skippedTag: String = ""
+    /** 已跳过的版本号（Compose 可观察，清除后文案即时消失） */
+    var skippedTag by mutableStateOf("")
         private set
 
     /** App 启动时载入（MainActivity.onCreate 调用，早于任何检查） */
@@ -69,11 +79,9 @@ object UpdatePolicy {
      */
     fun shouldCheckNow(now: Long = System.currentTimeMillis()): Boolean {
         if (mode == Mode.OFF) return false
-        if (lastCheckMs > 0 && now - lastCheckMs < THROTTLE_WINDOW_MS) return false
+        if (lastCheckMs > 0 && now - lastCheckMs < THROTTLE_MS) return false
         return true
     }
-
-    private const val THROTTLE_WINDOW_MS = THROTTLE_MS
 
     /** 该 tag 是否已被用户跳过 */
     fun isSkipped(tag: String): Boolean = tag.isNotBlank() && tag == skippedTag

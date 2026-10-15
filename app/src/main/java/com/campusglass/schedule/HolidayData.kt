@@ -32,6 +32,9 @@ object HolidayData {
 
         /** 传统节日（不放假，如春节/元宵，仅作日历提示） */
         FESTIVAL("🧨", false),
+
+        /** 校级大型活动（运动会等）——课程/作息可能调整，需提醒查看通知 */
+        ACTIVITY("🏅", false),
     }
 
     /** 校历事件：带类型，用于课表校历提示栏 */
@@ -87,6 +90,13 @@ object HolidayData {
             note = "10/10（周六）上 10/7（周三）的课程",
         ),
         CalendarEvent("新生军训", LocalDate.of(2026, 10, 26), LocalDate.of(2026, 11, 8), EventKind.MILITARY),
+
+        // —— 11 月 ——
+        CalendarEvent(
+            "南平校区运动会",
+            LocalDate.of(2026, 11, 9), LocalDate.of(2026, 11, 10), EventKind.ACTIVITY,
+            note = "南平校区运动会（11/9-11/10）。运动会期间课程与作息可能有调整，请注意查看学院/教务通知。",
+        ),
 
         // —— 2027 年 1 月 ——
         CalendarEvent("元旦放假", LocalDate.of(2027, 1, 1), LocalDate.of(2027, 1, 3), EventKind.HOLIDAY, note = "以国务院办公厅通知为准"),
