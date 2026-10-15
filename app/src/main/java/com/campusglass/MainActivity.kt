@@ -108,6 +108,7 @@ class MainActivity : ComponentActivity() {
         WidgetNav.pendingTab.value = intent?.getStringExtra("openTab")   // 小部件带参直达
         intent?.removeExtra("openTab")                                  // A1：消费后移除，旋转不再弹回
         ThemePrefs.load(this)
+        com.campusglass.update.UpdatePolicy.load(this)     // v4.18：启动自动检查更新的用户偏好
         setContent {
             CampusGlassTheme {
                 // B-4：首次启动强制同意隐私政策（未同意不可使用）
@@ -127,6 +128,8 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 CampusGlassApp()
+                // v4.18：启动时按用户偏好自动检查更新（OFF 时不联网）
+                com.campusglass.update.AutoUpdateHost()
             }
         }
     }

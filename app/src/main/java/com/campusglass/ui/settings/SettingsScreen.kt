@@ -63,6 +63,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.campusglass.BuildConfig
+import com.campusglass.update.UpdateCheck
+import com.campusglass.update.UpdatePolicy
+import com.campusglass.update.checkUpdate
 import com.campusglass.schedule.PeriodTable
 import com.campusglass.schedule.ScheduleStore
 import com.campusglass.ui.glass.AcrylicCard
@@ -92,6 +95,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
+    "v4.18.sljzy · 2026-10-15" to "启动时自动检查更新改为用户可决定：设置页新增「从不 / 每次打开·弹窗 / 每次打开·静默」三选一；静默模式只在顶部出提示条不打断；忽略的版本不再重复提示且可清除记录；10 分钟节流避免频繁请求被限流；自动检查失败静默处理不报错",
     "v4.17.sljzy · 2026-10-15" to "快递查询修好「查不到」：根因是免费接口概率性返回（实测同一单号连发 15 次只有 2 次给数据）而旧版每个公司只试一次——现改为同一公司自动重试最多 5 次；改用 m.kuaidi100.com（www 实测连续 12 次全空）；不再用 condition 判空（存在 condition=F00 却带 17 条真实轨迹的响应）；剔除「查无结果」占位条目；总时限放宽到 25s；状态补「已投递」",
     "v4.16.sljzy · 2026-10-15" to "快递查询体验修正：新增「支持哪些快递」清单（写在说明旁边，可展开）；失败原因分类说清楚——接口正常但数据源没收录时明确提示「快递100 免费数据源里没有这条记录」并列出三种常见原因，与网络异常/限流分开；新增「去快递100 网页查」浏览器兜底入口；请求参数与快递100 网页端对齐",
     "v4.15.sljzy · 2026-10-14" to "快递功能完善：查询历史升级为「单号+快递公司+状态+时间」并可只看未签收；长轨迹默认折叠为最近 3 条可展开；结果卡支持一键复制单号、失败可直接重试；输入时离线识别快递公司；修掉「取消上一个查询后正在查询状态被旧任务抹掉」的竞态。署名补接棒方模型名",
@@ -417,6 +421,46 @@ fun SettingsScreen() {
                             },
                         )
                     }
+                    Text("🔔 启动时自动检查更新", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "打开 App 时是否自动去 GitHub 看有没有新版本（只读版本号与更新日志，不上传任何数据）。" +
+                            "选「从不」后仍可随时用下面的按钮手动检查。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(UpdatePolicy.Mode.entries.toList()) { m ->
+                            FilterChip(
+                                selected = UpdatePolicy.mode == m,
+                                onClick = { UpdatePolicy.setMode(context, m) },
+                                label = {
+                                    Text(
+                                        when (m) {
+                                            UpdatePolicy.Mode.OFF -> "从不"
+                                            UpdatePolicy.Mode.WHEN_OPEN -> "每次打开·弹窗"
+                                            UpdatePolicy.Mode.SILENT -> "每次打开·静默"
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                },
+                            )
+                        }
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(onClick = { UpdatePolicy.clearSkipped(context) }) {
+                            Text("清除「已跳过版本」记录", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                    if (UpdatePolicy.skippedTag.isNotBlank()) {
+                        Text(
+                            "当前已跳过：v${UpdatePolicy.skippedTag}（该版本不再提示，发新版本仍会提示）",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        )
+                    }
                     Button(
                         onClick = { showUpdate = true },
                         modifier = Modifier.fillMaxWidth(),
@@ -732,104 +776,20 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
     )
 }
 
-/** 检查更新结果 */
-private data class UpdateCheck(
-    val message: String,
-    val newTag: String?,
-    val downloadUrl: String? = null,
-    val fileName: String? = null,
-    val sha256: String? = null,
-    val sigUrl: String? = null,      // B-2：Ed25519 签名资产地址
-)
-
-/** 检查更新：读 GitHub Releases 最新版（带 User-Agent + 重试；GitHub API 强制要求 UA） */
-private fun checkUpdate(): UpdateCheck {
-    val url = "https://api.github.com/repos/Blank2007/fafu-campus-assistant/releases/latest"
-    var lastErr = ""
-    repeat(2) {
-        runCatching {
-            val conn = URL(url).openConnection() as HttpURLConnection
-            conn.connectTimeout = 12_000
-            conn.readTimeout = 12_000
-            conn.requestMethod = "GET"
-            conn.setRequestProperty("User-Agent", "FAFU-Campus-Assistant/" + BuildConfig.VERSION_NAME)   // SET-4
-            conn.setRequestProperty("Accept", "application/vnd.github+json")
-            val code = conn.responseCode
-            if (code == 404) {
-                conn.disconnect()
-                lastErr = "未找到发布信息"
-                return@runCatching
-            }
-            if (code == 403) {
-                // T7：限流专属文案 + 尊重 Retry-After
-                val wait = conn.getHeaderField("Retry-After")?.toLongOrNull()?.coerceIn(1, 5) ?: 2
-                conn.disconnect()
-                lastErr = "GitHub 接口限流，请 ${wait}s 后再试"
-                Thread.sleep(wait * 1000)
-                return@runCatching
-            }
-            if (code != 200) {
-                conn.disconnect()
-                lastErr = "HTTP $code"
-                return@runCatching
-            }
-            val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
-            conn.disconnect()
-            val latest = json.optString("tag_name", "").removePrefix("v").removePrefix("V")
-            val body = json.optString("body", "").trim()      // 更新日志
-            // U7：下载地址/文件名/sha256 来自 API 资产（不硬编码）
-            // B-2：按名称匹配 .apk 与配套 .apk.sig（不盲取 assets[0]，防资产顺序变化误取）
-            val assetsArr = json.optJSONArray("assets")
-            var apkObj: org.json.JSONObject? = null
-            var sigObj: org.json.JSONObject? = null
-            if (assetsArr != null) {
-                for (i in 0 until assetsArr.length()) {
-                    val o = assetsArr.optJSONObject(i) ?: continue
-                    val n = o.optString("name")
-                    if (n.endsWith(".apk") && apkObj == null) apkObj = o
-                    if (n.endsWith(".apk.sig")) sigObj = o
-                }
-            }
-            val a0 = apkObj
-            val assetUrl = a0?.optString("browser_download_url")?.ifBlank { null }
-            val assetName = a0?.optString("name")?.ifBlank { null }
-                ?.replace(Regex("[^A-Za-z0-9._-]"), "_")
-            val assetSha = a0?.optString("digest")?.removePrefix("sha256:")?.ifBlank { null }
-            val sigUrl = sigObj?.optString("browser_download_url")?.ifBlank { null }
-            val current = BuildConfig.VERSION_NAME
-            // SET-4：数字段比大小（兼容 3.2 / v3.2.0 / 3.2.zilyf 等写法），旧版不再误报
-            fun verParts(s: String) = s.split(Regex("[^0-9]+")).mapNotNull { it.toIntOrNull() }
-            val a = verParts(latest); val b = verParts(current)
-            val cmp = (0 until maxOf(a.size, b.size)).fold(0) { acc, i ->
-                if (acc != 0) acc else (a.getOrElse(i) { 0 } - b.getOrElse(i) { 0 })
-            }
-            return when {
-                latest.isBlank() -> UpdateCheck("没获取到版本信息，请稍后再试", null)
-                cmp <= 0 -> UpdateCheck("已是最新版本（v$current）✅", null)
-                else -> UpdateCheck(
-                    "发现新版本 v$latest（当前 v$current）！选一种方式更新" +
-                        if (body.isNotBlank()) "\n\n📋 更新日志：\n" + body.take(800) else "",
-                    latest,
-                    assetUrl,
-                    assetName,
-                    assetSha,
-                    sigUrl,
-                )
-            }
-        }.onFailure { lastErr = it.message ?: "网络异常" }
-    }
-    return UpdateCheck("检查失败：$lastErr（可能是网络不畅，可直接点「浏览器下载」查看）", null)
-}
 
 
-/** 检查更新弹窗 v4（审查 U1-U7 修复）：sha256/包名校验 · 可取消 · 旋转不丢 · 安装预检 · 残包清理 */
+/**
+ * 检查更新弹窗 v4（审查 U1-U7 修复）：sha256/包名校验 · 可取消 · 旋转不丢 · 安装预检 · 残包清理。
+ *
+ * v4.18：改为 public 并支持 [prefetched]——启动时自动检查已拿到结果，直接复用，不再重复请求 GitHub。
+ */
 @Composable
-private fun UpdateDialog(onDismiss: () -> Unit) {
+fun UpdateDialog(onDismiss: () -> Unit, prefetched: UpdateCheck? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var checking by remember { mutableStateOf(true) }
-    var info by remember { mutableStateOf<String?>(null) }
-    var check by remember { mutableStateOf<UpdateCheck?>(null) }
+    var checking by remember { mutableStateOf(prefetched == null) }
+    var info by remember { mutableStateOf<String?>(prefetched?.message) }
+    var check by remember { mutableStateOf<UpdateCheck?>(prefetched) }
     var dlInfo by remember { mutableStateOf("") }
     var downloading by remember { mutableStateOf(false) }
     var dlJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
@@ -842,6 +802,7 @@ private fun UpdateDialog(onDismiss: () -> Unit) {
             val keep = prefs.getString("ready_path", "") ?: ""
             dir.listFiles()?.forEach { if (it.absolutePath != keep) it.delete() }
         }
+        if (prefetched != null) return@LaunchedEffect          // v4.18：启动时已查过，直接复用
         val r = withContext(Dispatchers.IO) { checkUpdate() }
         info = r.message
         check = r
