@@ -33,6 +33,8 @@ class WidgetListService : RemoteViewsService() {
         private val wid = intent.getIntExtra("wid", -1)
         private var items: List<com.campusglass.schedule.Course> = emptyList()
         private var maxP = PeriodTable.MAX_PERIODS                 // V4-24
+        /** 课程名 → 配色下标；与 App 内课表同源（[CourseColors]），保证两处同色 */
+        private var colorIdx: Map<String, Int> = emptyMap()
 
         override fun onCreate() {}
 
@@ -44,7 +46,10 @@ class WidgetListService : RemoteViewsService() {
             val wd = ScheduleStore.weekdayOf(base)
             val showWeekend = com.campusglass.ui.theme.ThemePrefs.showWeekend.value   // V4-24
             maxP = PeriodTable.periodsPerDay(context)                                 // V4-24
-            items = ScheduleStore.loadCourses(context)
+            // V5-1：配色基于**整份课表**算（不是当天那几门），否则同门课在不同天颜色会变
+            val all = ScheduleStore.loadCourses(context)
+            colorIdx = com.campusglass.schedule.CourseColors.indexMap(all)
+            items = all
                 .filter { it.weekday == wd && week in it.weeks }
                 .filter { showWeekend || (it.weekday != 6 && it.weekday != 7) }       // 与 App 一致
                 .sortedBy { it.startPeriod }
@@ -70,10 +75,10 @@ class WidgetListService : RemoteViewsService() {
             rv.setTextViewText(R.id.row_time, "$start - $end")      // 单行时间段（不再上下错位）
             rv.setTextViewText(R.id.row_name, c.name + "（第${c.startPeriod}-${endShown}节）")
             rv.setTextViewText(R.id.row_loc, c.location.ifBlank { c.teacher }.ifBlank { " " })
-            // 课程彩色竖条
+            // 课程彩色竖条 —— 与 App 内课表一致：同名同色、不同课尽量不撞色
             rv.setInt(
                 R.id.row_accent, "setBackgroundColor",
-                ACCENT[Math.floorMod(c.name.hashCode() * 31 + c.weekday * 7 + c.startPeriod, ACCENT.size)],
+                ACCENT[com.campusglass.schedule.CourseColors.indexOf(colorIdx, c.name)],
             )
             // W-5：行内点击 fill-in
             rv.setOnClickFillInIntent(

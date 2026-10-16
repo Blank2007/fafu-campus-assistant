@@ -22,6 +22,38 @@ data class Course(
 )
 
 /**
+ * 课程配色（S25）：**同名课程必定同色、不同课程尽量不撞色**。
+ *
+ * App 内课表与桌面小部件共用这一份逻辑，保证两处颜色一致。
+ * 调色板容量 12，课程种类超过 12 时才开始回绕复用。
+ *
+ * 分配方式：把整份课表里**不同的课程名**排序后依次占位。
+ * 按名字（而非首次出现顺序）排序，是为了增删课、切周时已有课程颜色不跳变。
+ */
+object CourseColors {
+
+    /** 调色板容量（实际色值由各渲染端各自持有：App 用 [Color]，小部件用 Int） */
+    const val SIZE = 12
+
+    /**
+     * 课程名 → 调色板下标（0..SIZE-1）。
+     * 传入的应是**整份课表**（不只是当前显示的某一周），这样切周颜色稳定。
+     */
+    fun indexMap(courses: List<Course>): Map<String, Int> =
+        courses.asSequence()
+            .map { it.name }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+            .mapIndexed { i, name -> name to (i % SIZE) }
+            .toMap()
+
+    /** 单门课的颜色下标；名字不在映射表里时按名字哈希兜底（保证同色） */
+    fun indexOf(map: Map<String, Int>, name: String): Int =
+        map[name] ?: Math.floorMod(name.hashCode(), SIZE)
+}
+
+/**
  * 节次作息（每天节数 1-24 自定义；逐节时间可改）。
  * 审查修复：T4 条目错位（不再丢条目）、S24 结果缓存、W-7 变更后推送小部件。
  */

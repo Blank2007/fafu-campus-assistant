@@ -71,6 +71,14 @@ private fun dayLabel(wd: Int) = "周" + "一二三四五六日"[wd - 1]
 
 private val DAY_ORDER = listOf(7, 1, 2, 3, 4, 5, 6)
 
+/**
+ * 课程名 → 颜色下标（S25）。配色规则见 [CourseColors]：
+ * 同名必定同色、不同课程尽量不撞色（先各占一个槽位，超过 12 门才回绕）。
+ * 传整份课表，保证切周/增删课颜色稳定。
+ */
+private fun courseColorIndex(courses: List<Course>): Map<String, Int> =
+    CourseColors.indexMap(courses)
+
 /** S15：行高随字号档位缩放（0.85×/1×/1.2× → 70/78/92dp） */
 private fun rowHeightDp(): Int = when (ThemePrefs.scheduleFontScale.value) {
     0 -> 70
@@ -589,6 +597,10 @@ private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Un
     val rowH = rowHeightDp()                                            // S15
     val timeFont = if (ThemePrefs.scheduleFontScale.value == 2) 9 else 8   // S15
 
+    // 「课程名 → 配色下标」映射：让**同名课程颜色一致、不同课程尽量不撞色**。
+    // 依赖整份课表（而非仅当周），且按课程名排序后分配 —— 因此切周时颜色稳定不跳。
+    val colorIdx = remember(courses) { courseColorIndex(courses) }
+
     Card(Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(3.dp)) {
         Column(Modifier.padding(vertical = 6.dp, horizontal = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -678,6 +690,7 @@ private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Un
                                                 .coerceIn(1, periods)
                                             CourseBlock(
                                                 c,
+                                                PALETTE[CourseColors.indexOf(colorIdx, c.name)],
                                                 Modifier
                                                     .fillMaxWidth()
                                                     .padding(horizontal = 2.dp)
@@ -698,10 +711,12 @@ private fun Timetable(courses: List<Course>, week: Int, onCourse: (Course) -> Un
 }
 
 @Composable
-private fun CourseBlock(c: Course, modifier: Modifier, onCourse: (Course) -> Unit) {
-    val color = PALETTE[Math.floorMod(
-        c.name.hashCode() * 31 + c.weekday * 7 + c.startPeriod, PALETTE.size
-    )]
+private fun CourseBlock(
+    c: Course,
+    color: Color,
+    modifier: Modifier,
+    onCourse: (Course) -> Unit,
+) {
     val scale = listOf(0.85f, 1f, 1.2f)[ThemePrefs.scheduleFontScale.value]
     val base = MaterialTheme.typography.labelSmall
     val style = base.copy(fontSize = base.fontSize * scale)
