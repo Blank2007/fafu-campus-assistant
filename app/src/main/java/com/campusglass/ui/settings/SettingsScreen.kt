@@ -16,6 +16,14 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -61,6 +69,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -101,7 +110,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
-    "v5.3.nmyx · 2026-10-18" to "设置页瘦身与更新日志改版：① 致谢列表默认收起（原来 9 张卡片平铺，把设置页拉得很长，现在点一下才展开）；② 设置页底部原有的「版本修改日志」区块已移除，改为独立的全屏更新日志页面（从「关于」卡片的按钮或检查更新弹窗进入，当前版本高亮并标注「当前版本」）；③ 检查更新时如果已是最新版本，弹窗内会直接显示本版更新内容，不用再翻日志",
+    "v5.3.nmyx · 2026-10-18" to "设置页瘦身与更新日志改版：① 致谢列表默认收起（原来 9 张卡片平铺，把设置页拉得很长，现在点一下才展开，展开/收起带撑开与淡入淡出动画、箭头同步旋转）；② 设置页底部原有的「版本修改日志」区块已移除，改为独立的全屏更新日志页面（从「关于」卡片的按钮或检查更新弹窗进入，当前版本高亮并标注「当前版本」）；③ 检查更新时如果已是最新版本，弹窗内会直接显示本版更新内容，不用再翻日志",
     "v5.2.nmyx · 2026-10-16" to "课表配色改进：修复「同一门课在不同时段颜色不一样」——此前配色把星期与节次也混进了计算，现已改为只按课程名分配；12 色调色板内每门不同的课各占一色、尽量不撞色（超过 12 门才回绕）；按名字而非出现顺序分配，因此增删课、切换周次都不会让已有课程换色；桌面小部件的课程色条同步采用同一套逻辑，两处颜色一致",
     "v5.1.nmyx · 2026-10-16" to "撤回上一版改错的底栏改动：v5.0 为修「滚到底最后一项被底栏压住」而在内容区统一预留了底栏高度，结果把内容视口缩短、反而让底栏像固定挡在下面，比改之前更糟——本版把内容区与课表页布局完全还原（与 v4.20 一致）。底栏是悬浮图层，滚动内容从下方穿过是预期表现，不再给它留白；同时保留 v5.0 的校历文字修复（运动会条目不再重复念标题与日期）",
     "v5.0.nmyx · 2026-10-15" to "修复真机实测发现的两处瑕疵：① 校历「南平校区运动会」条目文字重复（标题与备注拼接后变成「南平校区运动会（南平校区运动会（11/9-11/10）。运动会期间…）」，已去掉备注里重复的标题与日期，两条调休上课备注同步精简，查看课程调整通知的提醒完整保留）；② 曾在内容区统一预留底栏高度以修滚动遮挡，但因会缩短视口、造成底栏固定遮挡的观感，已于 v5.1 撤回",
@@ -522,34 +531,77 @@ fun SettingsScreen() {
             }
         }
 
-        // ---- 致谢（默认收起）----
+        // ---- 致谢（默认收起 + 展开/收起动画）----
         // 设置页底部原本平铺 9 张致谢卡片，把页面拉得很长；改为默认折叠，
         // 想看的人点一下展开，不影响正常设置流程。
+        //
+        // 整块塞进**一个 item**：AnimatedVisibility 没法在 LazyListScope 里包住 items，
+        // 而 9 张卡片本来也不需要懒加载。
+        // 展开 = 从上往下撑开 + 淡入；收起 = 向上收拢 + 淡出；箭头旋转 180°（比直接换 ▾/▴ 字符顺滑）。
         item {
-            TextButton(
-                onClick = { creditsExpanded = !creditsExpanded },
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
-            ) {
-                Text(
-                    if (creditsExpanded) "🙏 致谢 · 收起 ▴"
-                    else "🙏 致谢（开源项目与数据来源 · ${credits.size} 项）▾",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val arrowRot by animateFloatAsState(
+                    targetValue = if (creditsExpanded) 180f else 0f,
+                    animationSpec = tween(durationMillis = 220),
+                    label = "creditArrow",
                 )
-            }
-        }
-        if (creditsExpanded) {
-            items(credits) { c ->
-                AcrylicCard(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(c.name, style = MaterialTheme.typography.titleSmall)
-                        Text("作者：${c.author} · 许可：${c.license}", style = MaterialTheme.typography.bodySmall)
-                        Text(c.usage, style = MaterialTheme.typography.bodySmall)
-                        OutlinedButton(onClick = {
-                            runCatching {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(c.url)))
+                TextButton(
+                    onClick = { creditsExpanded = !creditsExpanded },
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                ) {
+                    Text(
+                        if (creditsExpanded) "🙏 致谢 · 收起"
+                        else "🙏 致谢（开源项目与数据来源 · ${credits.size} 项）",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        "▾",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier
+                            .padding(start = 4.dp)
+                            .rotate(arrowRot),
+                    )
+                }
+                AnimatedVisibility(
+                    visible = creditsExpanded,
+                    enter = expandVertically(
+                        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+                        expandFrom = Alignment.Top,
+                    ) + fadeIn(animationSpec = tween(durationMillis = 200)),
+                    exit = shrinkVertically(
+                        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+                        shrinkTowards = Alignment.Top,
+                    ) + fadeOut(animationSpec = tween(durationMillis = 140)),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        credits.forEach { c ->
+                            AcrylicCard(Modifier.fillMaxWidth()) {
+                                Column(
+                                    Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                                ) {
+                                    Text(c.name, style = MaterialTheme.typography.titleSmall)
+                                    Text(
+                                        "作者：${c.author} · 许可：${c.license}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                    Text(c.usage, style = MaterialTheme.typography.bodySmall)
+                                    OutlinedButton(onClick = {
+                                        runCatching {
+                                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(c.url)))
+                                        }
+                                    }) {
+                                        Text(
+                                            c.url,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            maxLines = 1,
+                                        )
+                                    }
+                                }
                             }
-                        }) { Text(c.url, style = MaterialTheme.typography.labelSmall, maxLines = 1) }
+                        }
                     }
                 }
             }
