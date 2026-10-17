@@ -16,18 +16,21 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -43,6 +46,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -62,6 +66,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.campusglass.BuildConfig
 import com.campusglass.update.UpdateCheck
 import com.campusglass.update.UpdatePolicy
@@ -95,6 +101,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
+    "v5.3.nmyx · 2026-10-18" to "设置页瘦身与更新日志改版：① 致谢列表默认收起（原来 9 张卡片平铺，把设置页拉得很长，现在点一下才展开）；② 设置页底部原有的「版本修改日志」区块已移除，改为独立的全屏更新日志页面（从「关于」卡片的按钮或检查更新弹窗进入，当前版本高亮并标注「当前版本」）；③ 检查更新时如果已是最新版本，弹窗内会直接显示本版更新内容，不用再翻日志",
     "v5.2.nmyx · 2026-10-16" to "课表配色改进：修复「同一门课在不同时段颜色不一样」——此前配色把星期与节次也混进了计算，现已改为只按课程名分配；12 色调色板内每门不同的课各占一色、尽量不撞色（超过 12 门才回绕）；按名字而非出现顺序分配，因此增删课、切换周次都不会让已有课程换色；桌面小部件的课程色条同步采用同一套逻辑，两处颜色一致",
     "v5.1.nmyx · 2026-10-16" to "撤回上一版改错的底栏改动：v5.0 为修「滚到底最后一项被底栏压住」而在内容区统一预留了底栏高度，结果把内容视口缩短、反而让底栏像固定挡在下面，比改之前更糟——本版把内容区与课表页布局完全还原（与 v4.20 一致）。底栏是悬浮图层，滚动内容从下方穿过是预期表现，不再给它留白；同时保留 v5.0 的校历文字修复（运动会条目不再重复念标题与日期）",
     "v5.0.nmyx · 2026-10-15" to "修复真机实测发现的两处瑕疵：① 校历「南平校区运动会」条目文字重复（标题与备注拼接后变成「南平校区运动会（南平校区运动会（11/9-11/10）。运动会期间…）」，已去掉备注里重复的标题与日期，两条调休上课备注同步精简，查看课程调整通知的提醒完整保留）；② 曾在内容区统一预留底栏高度以修滚动遮挡，但因会缩短视口、造成底栏固定遮挡的观感，已于 v5.1 撤回",
@@ -160,12 +167,25 @@ private val changelog = listOf(
     "v1.x-v2.1 · 2026-09-25 23:45 起" to "初版到原生 Material 化（历史版本，详见 CHANGELOG.md）",
 )
 
+/**
+ * 当前版本对应的日志条目。
+ *
+ * 按 [BuildConfig.VERSION_NAME] 去匹配 `changelog` 的键（键形如 `v5.2.nmyx · 2026-10-16`），
+ * 这样**忘记同步**时也不会把旧版本的日志当成当前版本展示；
+ * 万一真的匹配不到（例如打了临时包），退回第一条（约定第一条永远是最新）。
+ */
+private fun currentChangelog(): Pair<String, String> {
+    val v = BuildConfig.VERSION_NAME
+    return changelog.firstOrNull { it.first.startsWith("v$v") } ?: changelog.first()
+}
+
 /** 设置页 */
 @Composable
 fun SettingsScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var expanded by remember { mutableStateOf(false) }
+    var creditsExpanded by rememberSaveable { mutableStateOf(false) }   // 🙏 致谢默认收起
+    var showChangelog by rememberSaveable { mutableStateOf(false) }     // 📋 更新日志二级页面
     var showTimeDialog by remember { mutableStateOf(false) }
     var showColorPicker by remember { mutableStateOf(false) }
     var showUpdate by rememberSaveable { mutableStateOf(false) }
@@ -474,6 +494,10 @@ fun SettingsScreen() {
                         onClick = { showPrivacy = true },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("📜 隐私政策与数据使用协议") }
+                    OutlinedButton(
+                        onClick = { showChangelog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("📋 更新日志（全部版本）") }
                     if (showPrivacy) {
                         PrivacyPolicyDialog(onClose = { showPrivacy = false })
                     }
@@ -498,52 +522,35 @@ fun SettingsScreen() {
             }
         }
 
-        // ---- 版本日志 ----
+        // ---- 致谢（默认收起）----
+        // 设置页底部原本平铺 9 张致谢卡片，把页面拉得很长；改为默认折叠，
+        // 想看的人点一下展开，不影响正常设置流程。
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("📋 版本修改日志", style = MaterialTheme.typography.titleMedium)
-                changelog.first().let { (ver, desc) ->
-                    AcrylicCard(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text("$ver（当前版本）", style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.primary)
-                            Text(desc, style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
-                TextButton(onClick = { expanded = !expanded }) {
-                    Text(if (expanded) "收起历史版本 ▴" else "查看历史版本修改 ▾")
-                }
-                AnimatedVisibility(visible = expanded) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        changelog.drop(1).forEach { (ver, desc) ->
-                            AcrylicCard(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text(ver, style = MaterialTheme.typography.titleSmall)
-                                    Text(desc, style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                        }
-                    }
-                }
+            TextButton(
+                onClick = { creditsExpanded = !creditsExpanded },
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    if (creditsExpanded) "🙏 致谢 · 收起 ▴"
+                    else "🙏 致谢（开源项目与数据来源 · ${credits.size} 项）▾",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
             }
         }
-
-        // ---- 致谢 ----
-        item {
-            Text("🙏 致谢（借用 / 参考的开源项目与数据来源）", style = MaterialTheme.typography.titleMedium)
-        }
-        items(credits) { c ->
-            AcrylicCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(c.name, style = MaterialTheme.typography.titleSmall)
-                    Text("作者：${c.author} · 许可：${c.license}", style = MaterialTheme.typography.bodySmall)
-                    Text(c.usage, style = MaterialTheme.typography.bodySmall)
-                    OutlinedButton(onClick = {
-                        runCatching {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(c.url)))
-                        }
-                    }) { Text(c.url, style = MaterialTheme.typography.labelSmall, maxLines = 1) }
+        if (creditsExpanded) {
+            items(credits) { c ->
+                AcrylicCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(c.name, style = MaterialTheme.typography.titleSmall)
+                        Text("作者：${c.author} · 许可：${c.license}", style = MaterialTheme.typography.bodySmall)
+                        Text(c.usage, style = MaterialTheme.typography.bodySmall)
+                        OutlinedButton(onClick = {
+                            runCatching {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(c.url)))
+                            }
+                        }) { Text(c.url, style = MaterialTheme.typography.labelSmall, maxLines = 1) }
+                    }
                 }
             }
         }
@@ -554,6 +561,9 @@ fun SettingsScreen() {
     }
     if (showColorPicker) {
         ColorPickerDialog(onDismiss = { showColorPicker = false })
+    }
+    if (showChangelog) {
+        ChangelogPage(onClose = { showChangelog = false })
     }
 }
 
@@ -784,9 +794,92 @@ private fun PeriodTimesDialog(onDismiss: () -> Unit) {
 
 
 /**
+ * 📋 更新日志二级页面（全屏）。
+ *
+ * 入口：「检查更新」弹窗（发现新版本 / 已是最新都能进）与设置页「关于」卡片。
+ * 列出 [changelog] 全部条目，当前版本置顶高亮并标注「当前版本」。
+ *
+ * 为什么用全屏 Dialog 而不是导航目的地：本 App 是单 Activity + 底栏 tab 状态切换
+ * （`MainActivity` 里没有 NavHost），为单独一个只读页面引入导航栈不划算 ——
+ * 全屏 Dialog 视觉等价，退出即关闭，不会干扰底栏与返回逻辑。
+ */
+@Composable
+fun ChangelogPage(onClose: () -> Unit) {
+    val currentVer = currentChangelog().first
+    Dialog(
+        onDismissRequest = onClose,
+        // usePlatformDefaultWidth=false → 铺满屏幕；decorFitsSystemWindows=false → 自己处理 inset，
+        // 让背景色能铺到状态栏/导航栏后面（与 App 的 edge-to-edge 观感一致）
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("📋 更新日志", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            "当前 v${BuildConfig.VERSION_NAME} · 共 ${changelog.size} 个版本",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        )
+                    }
+                    TextButton(onClick = onClose) { Text("关闭") }
+                }
+                HorizontalDivider()
+                LazyColumn(
+                    Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(changelog) { (ver, desc) ->
+                        val isCurrent = ver == currentVer
+                        AcrylicCard(Modifier.fillMaxWidth()) {
+                            Column(
+                                Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(3.dp),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Text(
+                                        ver,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = if (isCurrent) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurface,
+                                    )
+                                    if (isCurrent) {
+                                        Text(
+                                            "当前版本",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+                                Text(desc, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
  * 检查更新弹窗 v4（审查 U1-U7 修复）：sha256/包名校验 · 可取消 · 旋转不丢 · 安装预检 · 残包清理。
  *
  * v4.18：改为 public 并支持 [prefetched]——启动时自动检查已拿到结果，直接复用，不再重复请求 GitHub。
+ * v5.3：已是最新版本时在弹窗内补显本版更新内容，并提供「📋 全部日志」进入 [ChangelogPage]。
  */
 @Composable
 fun UpdateDialog(onDismiss: () -> Unit, prefetched: UpdateCheck? = null) {
@@ -798,6 +891,7 @@ fun UpdateDialog(onDismiss: () -> Unit, prefetched: UpdateCheck? = null) {
     var dlInfo by remember { mutableStateOf("") }
     var downloading by remember { mutableStateOf(false) }
     var dlJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var showAllLog by remember { mutableStateOf(false) }      // 📋 全部更新日志二级页面
     val prefs = remember { context.getSharedPreferences("update", android.content.Context.MODE_PRIVATE) }
 
     // U6：打开弹窗即清理历史残包（保留正在安装的）
@@ -833,6 +927,9 @@ fun UpdateDialog(onDismiss: () -> Unit, prefetched: UpdateCheck? = null) {
         }
     }
 
+    // 「确认已是最新」才补显本版日志；检查失败（网络/限流）时不显示，避免看起来像版本信息
+    val isUpToDate = !checking && check?.newTag == null && (info ?: "").contains("已是最新版本")
+
     AlertDialog(
         onDismissRequest = {
             if (!downloading) { dlJob?.cancel(); onDismiss() }     // U4：下载中可取消而非被困
@@ -860,6 +957,17 @@ fun UpdateDialog(onDismiss: () -> Unit, prefetched: UpdateCheck? = null) {
                     if (dlInfo.isNotBlank()) {
                         Text(dlInfo, style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary)
+                    }
+                    // 已是最新 → 顺手把**当前版本**改了什么显示出来，不用再翻日志
+                    if (isUpToDate) {
+                        val (ver, desc) = currentChangelog()
+                        HorizontalDivider(Modifier.padding(vertical = 2.dp))
+                        Text(
+                            "本版更新内容（$ver）",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(desc, style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -1014,13 +1122,20 @@ fun UpdateDialog(onDismiss: () -> Unit, prefetched: UpdateCheck? = null) {
                         ) { Text("🌐 浏览器下载") }
                     }
                 }
-                !checking -> TextButton(onClick = onDismiss) { Text("关闭") }
+                !checking -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(onClick = { showAllLog = true }) { Text("📋 全部日志") }
+                    TextButton(onClick = onDismiss) { Text("关闭") }
+                }
             }
         },
         dismissButton = {
             if (!downloading) TextButton(onClick = onDismiss) { Text("取消") }
         },
     )
+
+    // 二级页面：叠在检查更新弹窗之上（后声明 → 后加入窗口 → 显示在上层），
+    // 关掉后仍回到弹窗，不会丢失刚才的检查结果
+    if (showAllLog) ChangelogPage(onClose = { showAllLog = false })
 }
 
 /** U1：文件 sha256 */
