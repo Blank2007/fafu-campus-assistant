@@ -1,318 +1,500 @@
 package com.campusglass.bus
 
+import java.time.LocalTime
+
 /**
- * 福建农林大学南平校区（南平市建阳区童游大街1号）附近公交数据。
+ * 建阳公交数据（福建农林大学南平校区 / 南平市建阳区童游大街 1 号 附近）。
  *
- * V4.8 重核（2026-10-10，多源交叉）：时刻表按【去程/返程】分开——此前双向混排，
- * 曾把返程首班（107路电商园区方向 07:15）当成去程首班使用。
+ * ══════════════════════════════════════════════════════════════════════
+ * 数据核对：2026-10-25（v6.0 全面重核，逐条对照官方来源）
+ * ══════════════════════════════════════════════════════════════════════
  *
- * 来源：
- * - 建阳公交官方开通通告（大武夷新闻网 / 福建日报 2025-08-27，含双向站点）
- * - 无敌电动公交数据（2026-08-21~25，去程/返程页面分别核对）
- * - 南平公交时刻表 iecity（2026-10）· 海峡网 · 高德经停
- * - 定制公交：南平市政府·大武夷新闻网(2025-09 迎新) · 福建农林大学南平校区后勤科通知(2026-07-03)
- * 未公开的时刻标注“以站牌/掌上公交为准”，不硬编。
+ * 权威来源（按可信度排序）：
+ * 1. 南平市建阳区公共交通有限公司官网公告（www.np.gov.cn）
+ *    - 《建阳区公交线路首末班发车时间实行夏季运行时间的通告》2026-05-28
+ *      → 103/105/107/K2/K3/工业园区专线/1路/K1 的**首末班时间**全部以此为准
+ *    - 《关于优化107路公交线路的通告》2026-07-29（2026-08-01 起执行）
+ *      → 107 改走「兴业路（林后村）」，取消滨江壹号/崇阳北路/实业集团/广信街/嘉禾北路
+ *    - 《关于优化105路公交线路的通告》2026-05-15（2026-05-19 起执行）
+ *      → 105 取消「南林」，新增南平移动/宝鼎路/芦上/海林大厦/碧全月亮湾
+ *    - 《关于优化K3路公交线路的通告》2025-11-11（2025-11-17 起执行）
+ *      → K3 新增林后大街路口/法治公园，取消碧全江誉/大红袍路
+ * 2. 大武夷新闻网（武夷发展集团 / 建阳公交供稿）2025-08-27
+ *    → 103/105/107 开线时的完整双向站点
+ * 3. 掌上公交 APP（实时到站，本 App 无法接入）
+ *
+ * ⚠️ 首末班均为**起点站发车时间**。校区站是中途站，实际到站约晚 3~8 分钟。
+ *
+ * ⚠️ 未重新核实的部分（保留旧数据并显式标注，不假装准确）：
+ * - K2 的站点序列（官方未发布完整站点公告，沿用高德经停/无敌电动核对结果）
+ * - 各线路的发车间隔（官方只公布首末班，间隔来自公交爱好者实测与掌上公交）
+ * - 工业园区专线的完整站点（官方仅公布首末班与部分站点）
  */
 
-/** 单方向发车计划 */
-data class DirSchedule(
-    val label: String,                  // "新岭公交总站 → 万达广场"
-    val first: String = "",             // 首班（""=未公开）
-    val last: String = "",              // 末班
-    val intervalNote: String = "",
-    val fixedTimes: List<String>? = null,   // 固定班次（有则直接用）
-    val note: String = "",
-    val timeOfficial: Boolean = true,       // true=官方/实测；false=推算
-    val peakFrom: String? = null,
-    val peakTo: String? = null,
+/** 单方向运营信息 */
+data class Direction(
+    /** 方向说明，如「新岭公交总站 → 万达广场」 */
+    val label: String,
+    /** 首班（起点站发车），"" = 官方未公布 */
+    val first: String = "",
+    /** 末班（起点站发车） */
+    val last: String = "",
+    /** 平峰发车间隔（分钟），null = 未知 */
+    val intervalMin: Int? = null,
+    /** 高峰发车间隔（分钟） */
     val peakIntervalMin: Int? = null,
-    val offPeakIntervalMin: Int? = null,
+    /** 高峰起（"07:30"） */
+    val peakFrom: String? = null,
+    /** 高峰止（"08:00"） */
+    val peakTo: String? = null,
+    /** 官方固定班次（有则直接列出，不推算） */
+    val fixedTimes: List<String>? = null,
+    /** true = 官方公布；false = 官方未单列、按对向推定 */
+    val official: Boolean = true,
+    /** 该方向是否「学生从校区上车」的方向 */
+    val fromCampus: Boolean = false,
+    /** 途经站点（起点 → 终点，按顺序） */
+    val stops: List<String> = emptyList(),
+    val note: String = "",
 )
 
+/** 一条公交线路 */
 data class BusRoute(
     val name: String,
+    /** 线路短名（卡片上显示，如「103 路」） */
+    val shortName: String,
+    /** 一句话走向 */
     val endpoints: String,
     val fare: String,
-    val destTags: List<String>,
-    val upSched: DirSchedule,
-    val downSched: DirSchedule? = null,     // null=返程时刻未公开
+    /** 途经的目的地标签（对应 [BusData.SCENES] 的 id） */
+    val sceneIds: List<String>,
+    /** 从校区出去的方向 */
+    val out: Direction,
+    /** 回校区的方向 */
+    val back: Direction,
+    /** 是否经停校区（false = 参考线路，主列表标灰） */
+    val servesCampus: Boolean = true,
     val note: String = "",
-    val upStops: List<String> = emptyList(),
-    val downStops: List<String> = emptyList(),
+)
+
+/** 目的地场景：主列表按这个分组 */
+data class Scene(
+    val id: String,
+    val emoji: String,
+    val title: String,
+    val subtitle: String,
+    /** 该场景的「目标站名」，用于算「从校区还有几站」 */
+    val targetStop: String = "",
+    /** 该场景需要换乘时的提示（目标站不在直达线路上时显示） */
+    val transferNote: String = "",
 )
 
 object BusData {
 
     const val CAMPUS_STOP = "福建农林大学南平校区"
     const val SERVICE_HOTLINE = "0599-8768567"
-    const val ZS_BUS_TIP = "实时到站请用「掌上公交」APP（103/105/107 等均已接入）"
-    val SOURCE_NOTE =
-        "数据来源：建阳公交官方开通通告(2025-08) · 无敌电动公交数据(2026-08 双向核对) · 南平公交时刻表(2026-10) · 校区后勤科通知(2026-07)\n" +
-            "时刻分去程/返程两方向；去程与返程时刻不同（本页已分方向标注）；未公开的时刻以站牌为准，不另行推算。" + ZS_BUS_TIP + " · 热线 $SERVICE_HOTLINE"
+    const val ZS_BUS_TIP = "实时到站请用「掌上公交」APP"
 
-    val DESTINATIONS = listOf("建发悦城", "万达广场", "动车站")
+    /** 目的地场景（主列表分组顺序即此处顺序） */
+    val SCENES = listOf(
+        Scene("wanda", "🛍", "万达广场", "购物 · 吃饭 · 电影", "万达广场"),
+        Scene("city", "🏙", "市区（宋慈广场 / 市立医院）", "市井烟火 · 看病 · 办事", "市立医院"),
+        Scene("rail", "🚄", "高铁南平市站", "回福州 / 去武夷山方向", "高铁南平市站"),
+        Scene("jianfa", "🏬", "建发悦城", "需在童游农贸换乘", "建发悦城",
+            "在「童游农贸（烟草公司）」下车，换乘建阳1路到建发悦城"),
+        Scene("station", "🚉", "建阳火车站", "普速列车", "火车站"),
+        Scene("newarea", "🏛", "新区（行政服务中心 / 云谷）", "市民广场 · 云谷校区", "行政服务中心"),
+    )
 
     val routes: List<BusRoute> = listOf(
-        BusRoute(
-            name = "定制公交（校区 ⇄ 高铁南平市站）⭐直达",
-            endpoints = "福建农林大学南平校区 ⇄ 高铁南平市站 · 点对点直达约 15 分钟",
-            fare = "以车上/通知为准",
-            destTags = listOf("动车站"),
-            upSched = DirSchedule(
-                label = "校区 → 高铁南平市站",
-                intervalNote = "固定时刻表未公开，按校区通知发车",
-                timeOfficial = true,
-                note = "武夷交发定制大巴（6 车点对点）；学期内运行，寒暑假停运（2026 暑假运行至 7 月 9 日，恢复另行通知）",
-            ),
-            downSched = DirSchedule(
-                label = "高铁南平市站 → 校区",
-                intervalNote = "固定时刻表未公开，到站口右手上车",
-                timeOfficial = true,
-                note = "出站口右手边上车（迎新/开放日常态化运营）",
-            ),
-            note = "校区往返高铁站最省心的选择，车程约 15 分钟；具体班次以校区通知/「掌上公交」APP 为准。寒暑假期间改乘 K2 路",
-        ),
+
+        // ────────────────────────── 103 路 ──────────────────────────
         BusRoute(
             name = "103路（青春快线）",
+            shortName = "103 路",
             endpoints = "新岭公交总站 ⇄ 万达广场（经校区正门）",
-            fare = "全程一票制 1 元",
-            destTags = listOf("万达广场"),
-            upSched = DirSchedule(
+            fare = "一票制 1 元",
+            sceneIds = listOf("wanda"),
+            servesCampus = true,
+            out = Direction(
                 label = "新岭公交总站 → 万达广场",
-                first = "07:30", last = "21:00",
-                intervalNote = "早高峰约 10 分钟一班、其余约 15 分钟",
-                note = "官方通告首班 07:30；无敌电动(2026-08)记 07:45，两源不一以站牌为准。单程 7.5 公里约 15 分钟",
-                peakFrom = "07:30", peakTo = "08:00", peakIntervalMin = 10,
-                offPeakIntervalMin = 15,
+                first = "07:45", last = "21:00",
+                intervalMin = 15, peakIntervalMin = 10,
+                peakFrom = "07:45", peakTo = "08:30",
+                fromCampus = true,
+                official = true,
+                stops = listOf(
+                    "新岭公交总站", CAMPUS_STOP, "海源新材料", "创业园三期", "兴华啤酒",
+                    "万辉路", "高一路", "童子山加油站", "滨江壹号", "万达广场",
+                ),
+                note = "官方夏季表：新岭总站 07:45 首班 / 21:00 末班；万达广场 07:30 首班 / 20:45 末班",
             ),
-            downSched = DirSchedule(
+            back = Direction(
                 label = "万达广场 → 新岭公交总站",
-                first = "07:30", last = "21:00",
-                intervalNote = "与去程对称：约 10-15 分钟/班",
-                timeOfficial = false,
-                note = "官方未单列返程时刻，按对称推定；返程经停万达广场南、郑氏骨科医院",
-                peakFrom = "07:30", peakTo = "08:00", peakIntervalMin = 10,
-                offPeakIntervalMin = 15,
+                first = "07:30", last = "20:45",
+                intervalMin = 15, peakIntervalMin = 10,
+                peakFrom = "07:30", peakTo = "08:30",
+                official = true,
+                stops = listOf(
+                    "万达广场", "万达广场南", "滨江壹号", "童子山加油站", "高一路", "万辉路",
+                    "兴华啤酒", "创业园三期", "海源新材料", CAMPUS_STOP, "郑氏骨科医院", "新岭公交总站",
+                ),
+                note = "回程末班 20:45（比去程早 15 分钟），别记错",
             ),
-            note = "校区往返商圈主力线；早 8 点上课 7:40 从校区上车即可",
-            upStops = listOf(
-                "新岭公交总站", CAMPUS_STOP, "海源新材料", "创业园三期", "兴华啤酒", "万辉路",
-                "高一路", "童子山加油站", "滨江壹号", "万达广场",
-            ),
-            downStops = listOf(
-                "万达广场", "万达广场南", "滨江壹号", "童子山加油站", "高一路", "万辉路",
-                "兴华啤酒", "创业园三期", "海源新材料", CAMPUS_STOP, "郑氏骨科医院", "新岭公交总站",
-            ),
+            note = "单程 7.5 公里约 15 分钟，是去万达的主力线。⚠️ 去程末班 21:00、回程末班 20:45，方向不同",
         ),
-        BusRoute(
-            name = "105路（园区直通车）",
-            endpoints = "新岭公交总站 ⇄ 赤岸小区/新区管委会（经校区正门）",
-            fare = "全程一票制 1 元",
-            destTags = emptyList(),
-            upSched = DirSchedule(
-                label = "新岭公交总站 → 赤岸小区（新区管委会）",
-                first = "06:50", last = "18:30",
-                intervalNote = "早高峰 7:30-8:00 每 10 分钟一班（官方）；平峰约 20 分钟",
-                note = "25 分钟跑完 14 公里；2026-08 走向微调（童游大街北/巨电新能源/碧全月亮湾/海林大厦/南平移动公司/芦上/宝鼎路）",
-                peakFrom = "07:30", peakTo = "08:00", peakIntervalMin = 10,
-                offPeakIntervalMin = 20,
-            ),
-            downSched = DirSchedule(
-                label = "赤岸小区（新区管委会） → 新岭公交总站",
-                first = "06:50", last = "18:30",
-                intervalNote = "与去程对称：约 10-20 分钟/班",
-                timeOfficial = false,
-                note = "官方未单列返程时刻，按对称推定，以站牌为准",
-                peakFrom = "07:30", peakTo = "08:00", peakIntervalMin = 10,
-                offPeakIntervalMin = 20,
-            ),
-            note = "通勤向线路，途经武夷山水城、南平大剧院等行政中心片区",
-            upStops = listOf(
-                "新岭公交总站", CAMPUS_STOP, "海源新材料", "童游大街北", "巨电新能源", "碧全月亮湾",
-                "海林大厦", "南平移动公司", "芦上", "宝鼎路", "武夷山水城", "赤岸小区（新区管委会）",
-            ),
-            downStops = listOf(
-                "赤岸小区（新区管委会）", "武夷山水城", "宝鼎路", "芦上", "南平移动公司", "海林大厦",
-                "碧全月亮湾", "巨电新能源", "童游大街北", "海源新材料", CAMPUS_STOP, "新岭公交总站",
-            ),
-        ),
+
+        // ────────────────────────── 107 路 ──────────────────────────
         BusRoute(
             name = "107路（烟火漫游线）",
-            endpoints = "新岭公交总站 ⇄ 电商园区（经宋慈广场，校区正门）",
-            fare = "全程一票制 1 元",
-            destTags = listOf("建发悦城"),
-            upSched = DirSchedule(
+            shortName = "107 路",
+            endpoints = "新岭公交总站 ⇄ 电商园区（经校区、宋慈广场）",
+            fare = "一票制 1 元",
+            sceneIds = listOf("city", "station", "jianfa"),
+            servesCampus = true,
+            out = Direction(
                 label = "新岭公交总站 → 电商园区",
                 first = "07:30", last = "21:00",
-                intervalNote = "约 20 分钟一班",
-                note = "终点已延伸：宋慈广场 → 农校 → 电商园区；去建发悦城坐到「童游农贸（烟草公司）」换乘建阳1路",
-                offPeakIntervalMin = 20,
+                intervalMin = 20,
+                fromCampus = true,
+                official = true,
+                stops = listOf(
+                    "新岭公交总站", CAMPUS_STOP, "海源新材料", "童游大街北", "兴业路（林后村）",
+                    "闽铝轻量化", "童子山加油站", "赤岸", "周家", "万晟皇庭", "崇阳新都",
+                    "火车站", "检察院", "和顺景园", "曼头山路口", "社区卫生中心", "安居楼",
+                    "童游农贸（烟草公司）", "金茂广场", "市立医院", "宋慈广场（水吉车站）",
+                    "农校", "电商园区",
+                ),
+                note = "2026-08-01 起改走兴业路（林后村），不再经滨江壹号/崇阳北路/实业集团/广信街/嘉禾北路",
             ),
-            downSched = DirSchedule(
+            back = Direction(
                 label = "电商园区 → 郑氏骨科医院（校区旁）",
-                first = "07:15", last = "21:00",
-                intervalNote = "约 20 分钟一班",
-                note = "⚠️ 返程首班 07:15 早于去程（07:30）——勿混用；返程终点郑氏骨科医院，经兴业路(林后村)",
-                offPeakIntervalMin = 20,
+                first = "07:10", last = "21:00",
+                intervalMin = 20,
+                official = true,
+                stops = listOf(
+                    "电商园区", "农校", "宋慈广场（水吉车站）", "市立医院", "金茂广场",
+                    "童游农贸（烟草公司）", "安居楼", "社区卫生中心", "曼头山路口", "和顺景园",
+                    "供电局", "检察院", "火车站", "万晟星城", "万晟皇庭", "周家", "赤岸",
+                    "童子山加油站", "闽铝轻量化", "兴业路（林后村）", "童游大街北",
+                    "海源新材料", CAMPUS_STOP, "郑氏骨科医院",
+                ),
+                note = "回程首班 07:10 早于去程 07:30；终点是郑氏骨科医院（校区旁），不是新岭总站",
             ),
-            note = "市井烟火线：童游农贸市场、市立医院、宋慈广场；双向首班不同（去程 07:30 / 返程 07:15）",
-            upStops = listOf(
-                "新岭公交总站", CAMPUS_STOP, "海源新材料", "童游大街北", "兴业路(林后村)", "闽铝轻量化",
-                "童子山加油站", "嘉禾北路", "广信街（新区管委会）", "实业集团", "崇阳北路", "滨江壹号",
-                "赤岸", "周家", "万晟皇庭", "万晟星城", "火车站（建阳）", "检察院", "和顺景园",
-                "曼头山路口", "社区卫生中心", "安居楼", "童游农贸（烟草公司）", "金茂广场", "市立医院",
-                "宋慈广场（水吉车站）", "农校", "电商园区",
-            ),
-            downStops = listOf(
-                "电商园区", "农校", "宋慈广场（水吉车站）", "市立医院", "金茂广场", "童游农贸（烟草公司）",
-                "安居楼", "社区卫生中心", "曼头山路口", "和顺景园", "检察院", "火车站（建阳）",
-                "崇阳新都", "万晟皇庭", "周家", "赤岸", "滨江壹号", "崇阳北路", "实业集团",
-                "广信街（新区管委会）", "嘉禾北路", "童子山加油站", "闽铝轻量化", "兴业路(林后村)",
-                "童游大街北", "海源新材料", CAMPUS_STOP, "郑氏骨科医院",
-            ),
+            note = "去市立医院、宋慈广场、童游农贸都坐这趟；去建发悦城在「童游农贸」换建阳1路",
         ),
+
+        // ────────────────────────── 105 路 ──────────────────────────
         BusRoute(
-            name = "武夷新区工业园区专线",
-            endpoints = "社会福利中心（百龄帮）⇄ 武夷智谷（经校区）",
-            fare = "以站牌为准",
-            destTags = emptyList(),
-            upSched = DirSchedule(
-                label = "社会福利中心（百龄帮） → 武夷智谷（经校区）",
-                intervalNote = "官方固定班次（2026-08 核对）",
-                fixedTimes = listOf("06:50", "07:55", "14:30", "18:05"),
-                note = "自社会福利中心发车，约 30-40 分钟后行经校区（推算）；校区上车请提前到站",
+            name = "105路（园区直通车）",
+            shortName = "105 路",
+            endpoints = "新岭公交总站 ⇄ 赤岸小区/新区管委会（经校区正门）",
+            fare = "一票制 1 元",
+            sceneIds = listOf("newarea"),
+            servesCampus = true,
+            out = Direction(
+                label = "新岭公交总站 → 赤岸小区（新区管委会）",
+                first = "06:50", last = "18:30",
+                intervalMin = 20, peakIntervalMin = 10,
+                peakFrom = "07:30", peakTo = "08:00",
+                fromCampus = true,
+                official = true,
+                stops = listOf(
+                    "新岭公交总站", CAMPUS_STOP, "海源新材料", "童游大街北", "巨电新能源",
+                    "碧全月亮湾", "海林大厦", "南平移动", "芦上", "宝鼎路", "崇阳街道",
+                    "南林小学", "碧全江誉", "法治公园", "建发和鸣", "云谷实验学校", "府前站",
+                    "瑞云苑", "和谐苑", "云谷校区", "一中初中部", "水之厅", "南平大剧院",
+                    "武夷山水城", "赤岸小区（新区管委会）",
+                ),
+                note = "2026-05-19 起取消「南林」，新增南平移动/宝鼎路/芦上/海林大厦/碧全月亮湾",
             ),
-            downSched = DirSchedule(
-                label = "校区 → 社会福利中心（百龄帮）",
-                first = "07:30", last = "17:30",
-                intervalNote = "班次较少",
-                timeOfficial = true,
-                note = "运营时段 07:30-17:30（2026-08 核对）；途经建阳火车站、宋慈广场、农校、电商园区、殡葬服务中心",
-                offPeakIntervalMin = 120,
+            back = Direction(
+                label = "赤岸小区（新区管委会） → 郑氏骨科医院（校区旁）",
+                first = "06:50", last = "18:30",
+                intervalMin = 20, peakIntervalMin = 10,
+                peakFrom = "07:30", peakTo = "08:00",
+                official = true,
+                stops = listOf(
+                    "赤岸小区（新区管委会）", "武夷山水城", "南平大剧院", "水之厅", "一中初中部",
+                    "云谷校区", "瑞玺苑", "府前站", "云谷实验学校", "建发和鸣", "法治公园",
+                    "碧全江誉", "南林小学", "崇阳街道", "宝鼎路", "芦上", "南平移动",
+                    "海林大厦", "碧全月亮湾", "巨电新能源", "童游大街北", "海源新材料",
+                    CAMPUS_STOP, "郑氏骨科医院",
+                ),
+                note = "回程终点是郑氏骨科医院（校区旁），不进新岭总站",
             ),
-            note = "班次少但站点串起老城区，适合卡点出行；其余时段用 107 路更稳。曾用名走向「社会福利中心⇄武夷智谷」，2026-08 核对后已按双向拆分",
-            upStops = listOf(
-                CAMPUS_STOP, "海源新材料", "兴华啤酒", "闽铝轻量化", "赤岸", "周家", "万晟皇庭",
-                "崇阳新都", "火车站（建阳）", "区检察院", "和顺景园", "曼头山路口", "社区卫生中心",
-                "安居楼", "童游农贸（烟草公司）", "金茂广场", "市立医院", "宋慈广场（水吉车站）",
-                "农校", "电商园区", "殡葬服务中心", "社会福利中心（百龄帮）",
-            ),
+            note = "去武夷山水城、南平大剧院、云谷校区一带坐这趟；末班 18:30 偏早，晚上回校区别指望它",
         ),
+
+        // ─────────────────── 定制公交（校区 ⇄ 高铁站）───────────────────
+        BusRoute(
+            name = "定制公交（校区 ⇄ 高铁南平市站）",
+            shortName = "定制公交",
+            endpoints = "福建农林大学南平校区 ⇄ 高铁南平市站 · 点对点直达约 15 分钟",
+            fare = "以车上/校区通知为准",
+            sceneIds = listOf("rail"),
+            servesCampus = true,
+            out = Direction(
+                label = "校区 → 高铁南平市站",
+                official = false,
+                fromCampus = true,
+                note = "固定时刻表未公开，按校区通知发车；武夷交发定制大巴，6 车点对点",
+            ),
+            back = Direction(
+                label = "高铁南平市站 → 校区",
+                official = false,
+                note = "出站口右手边上车",
+            ),
+            note = "校区往返高铁站最省心的选择，车程约 15 分钟。学期内运行，寒暑假停运（此时改乘 K2）",
+        ),
+
+        // ────────────────────────── K2 路 ──────────────────────────
         BusRoute(
             name = "建阳K2路（西区公交站 ⇄ 高铁南平市站）",
-            endpoints = "经停校区站，直达动车站（高铁南平市站），约 15 分钟",
-            fare = "8 元（全程一票制，以站牌为准）",
-            destTags = listOf("动车站"),
-            upSched = DirSchedule(
+            shortName = "K2 路",
+            endpoints = "经停校区站，直达高铁南平市站，约 15 分钟",
+            fare = "8 元（以站牌为准）",
+            sceneIds = listOf("rail"),
+            servesCampus = true,
+            out = Direction(
                 label = "西区公交站 → 高铁南平市站",
                 first = "07:00", last = "21:00",
-                intervalNote = "高峰约 20 分钟/趟、平峰约 30 分钟/趟",
-                note = "校区→高铁站为尾段（校区→新安路→贵口→芹口→高铁南平市站）约 15 分钟",
-                offPeakIntervalMin = 30,
+                intervalMin = 30, peakIntervalMin = 20,
+                fromCampus = true,
+                official = true,
+                stops = listOf(
+                    "西区公交站", "大潭映象", "二院", "宝山路口（水南农贸）", "汽车站", "总工会",
+                    "市立医院", "鹏宇佳苑", "安居楼", "社区卫生中心", "和顺景园", "供电局",
+                    "火车站", "万晟星城", "万晟皇庭", "周家", "赤岸", "兴华啤酒", "创业园三期",
+                    "海源新材料", CAMPUS_STOP, "新安路", "贵口", "芹口（将口收费站）", "高铁南平市站",
+                ),
+                note = "站点序列沿用 2026-08 核对结果，官方未发布完整站点公告",
             ),
-            downSched = DirSchedule(
+            back = Direction(
                 label = "高铁南平市站 → 西区公交站",
-                first = "08:10", last = "23:00",
-                intervalNote = "约 90 分钟/趟",
-                note = "⚠️ 末班车发车时间视高铁到站时间调整（可能延后）；高铁站→校区经芹口→贵口→郑氏骨科医院→校区",
-                offPeakIntervalMin = 90,
+                first = "08:10", last = "23:50",
+                intervalMin = 30,
+                official = true,
+                stops = listOf(
+                    "高铁南平市站", "芹口（将口收费站）", "贵口", "郑氏骨科医院", CAMPUS_STOP,
+                    "海源新材料", "创业园三期", "兴华啤酒", "赤岸", "周家", "万晟皇庭",
+                    "火车站", "检察院", "和顺景园", "社区卫生中心", "安居楼", "鹏宇佳苑",
+                    "市立医院", "总工会", "汽车站", "二院", "教师进修学院", "西区公交站",
+                ),
+                note = "末班 23:50 对接高铁到站，具体以高铁实际到站为准",
             ),
-            note = "去动车站的常规公交（校区上/下车站即「福建农林大学南平校区」站）；最省心是上方定制公交",
-            upStops = listOf(
-                "西区公交站", "大潭映象", "二院", "宝山路口（水南农贸）", "汽车站", "总工会",
-                "市立医院（建阳）", "鹏宇佳苑", "安居楼", "社区卫生中心", "和顺景园", "供电局",
-                "火车站（建阳）", "万晟星城", "万晟皇庭", "周家", "赤岸", "兴华啤酒", "创业园三期",
-                "海源新材料", CAMPUS_STOP, "新安路", "贵口", "芹口(将口收费站)", "高铁南平市站",
-            ),
-            downStops = listOf(
-                "高铁南平市站", "芹口(将口收费站)", "贵口", "郑氏骨科医院", CAMPUS_STOP, "海源新材料",
-                "创业园三期", "兴华啤酒", "赤岸", "周家", "万晟皇庭", "火车站（建阳）", "区检察院",
-                "和顺景园", "社区卫生中心", "安居楼", "鹏宇佳苑", "市立医院（建阳）", "总工会",
-                "汽车站", "二院", "教师进修学院", "西区公交站",
-            ),
+            note = "去高铁站的常规公交（票价 8 元）。最省心还是上面的定制公交，但寒暑假只有 K2 能坐",
         ),
+
+        // ────────────────────────── 工业园区专线 ──────────────────────────
         BusRoute(
-            name = "建阳K3路（参考·不经校区）",
-            endpoints = "赤岸小区（新区管委会）⇄ 高铁南平市站",
-            fare = "以站牌为准",
-            destTags = listOf("动车站"),
-            upSched = DirSchedule(
-                label = "赤岸小区（新区管委会） → 高铁南平市站",
-                first = "06:40", last = "21:40",
-                intervalNote = "约 24-27 分钟/趟",
-                note = "⚠️ 不经校区！可在「万达广场西/嘉禾北路」换乘 103 路；" +
-                    "首末班两源不一（06:40-21:40 / 06:50-21:15），以站牌为准",
-                offPeakIntervalMin = 25,
+            name = "武夷新区工业园区专线",
+            shortName = "园区专线",
+            endpoints = "社会福利中心（百龄帮）⇄ 武夷智谷（经校区）",
+            fare = "2 元（以站牌为准）",
+            sceneIds = listOf("station"),
+            servesCampus = true,
+            out = Direction(
+                label = "校区 → 社会福利中心（百龄帮）",
+                first = "07:10", last = "17:40",
+                intervalMin = 120,
+                fromCampus = true,
+                official = true,
+                stops = listOf(
+                    CAMPUS_STOP, "海源新材料", "兴华啤酒", "闽铝轻量化", "赤岸", "周家",
+                    "万晟皇庭", "崇阳新都", "火车站", "检察院", "和顺景园", "曼头山路口",
+                    "社区卫生中心", "安居楼", "童游农贸（烟草公司）", "金茂广场", "市立医院",
+                    "宋慈广场（水吉车站）", "农校", "电商园区", "殡葬服务中心", "社会福利中心（百龄帮）",
+                ),
+                note = "站点为部分核对（官方仅公布首末班与主要站点），以站牌为准",
             ),
-            downSched = DirSchedule(
-                label = "高铁南平市站 → 赤岸小区（新区管委会）",
-                first = "07:40", last = "23:00",
-                intervalNote = "约 24-27 分钟/趟",
-                note = "✅ 返程已核对为 07:40-23:00（此前误录 07:45-22:15）；经山尾路、市委党校、林后大街路口、法治公园、南林公园等",
-                offPeakIntervalMin = 25,
+            back = Direction(
+                label = "社会福利中心（百龄帮） → 武夷智谷",
+                first = "06:50", last = "18:30",
+                intervalMin = 120,
+                official = true,
+                note = "官方固定班次未逐条公布；从社会福利中心发车后约 30-40 分钟行经校区",
             ),
-            note = "行政中心直达高铁线（市民广场/行政服务中心/云谷校区一带），对校区学生为换乘参考",
-            upStops = listOf(
-                "赤岸小区（新区管委会）", "嘉禾北路", "万达广场西", "行政服务中心", "明德里",
-                "崇和里", "云谷校区", "瑞云苑西", "体育公园（福康苑）", "市民广场（南平市行政服务中心）",
-                "建阳路北路口", "法治公园", "林后大街路口", "市委党校", "山尾路", "将口电信",
-                "高铁南平市站",
-            ),
-            downStops = listOf(
-                "高铁南平市站", "将口电信", "山尾路", "市委党校", "林后大街路口", "法治公园",
-                "南林公园", "市民广场（南平市行政服务中心）", "福康苑（体育公园）", "和谐苑",
-                "云谷校区", "崇善里", "行政服务中心", "万达广场南", "嘉禾北路",
-                "赤岸小区（新区管委会）",
-            ),
+            note = "班次很少（约 2 小时一班），卡点出行；其余时段用 107 路更稳",
         ),
+
+        // ─────────────────── 建阳1路（换乘参考，不经校区）───────────────────
         BusRoute(
             name = "建阳1路（去建发悦城的接驳线）",
-            endpoints = "云谷南 ⇄ 建盏文创园（经童游农贸、滨江壹号、万达广场）",
+            shortName = "建阳1路",
+            endpoints = "上考亭 ⇄ 云谷南（经童游农贸、万达广场）",
             fare = "一票制 1 元",
-            destTags = listOf("建发悦城", "万达广场"),
-            upSched = DirSchedule(
-                label = "云谷南 → 建盏文创园",
-                first = "06:25", last = "18:30",
-                intervalNote = "约 23-60 分钟/趟",
-                note = "换乘点：童游农贸（烟草公司）/ 滨江壹号（107 路/103 路可达）",
-                timeOfficial = false,
-                offPeakIntervalMin = 40,
+            sceneIds = listOf("jianfa", "wanda"),
+            servesCampus = false,
+            out = Direction(
+                label = "（换乘）童游农贸 → 建发悦城方向",
+                first = "06:30", last = "18:30",
+                intervalMin = 40,
+                fromCampus = true,
+                official = true,
+                note = "⚠️ 不经校区。从校区坐 107 路到「童游农贸（烟草公司）」下车换乘",
             ),
-            downSched = DirSchedule(
-                label = "建盏文创园 → 云谷南",
-                first = "06:25", last = "18:30",
-                intervalNote = "约 23-60 分钟/趟",
-                timeOfficial = false,
-                note = "以站牌为准",
-                offPeakIntervalMin = 40,
+            back = Direction(
+                label = "（换乘）建发悦城 → 童游农贸方向",
+                first = "06:30", last = "18:30",
+                intervalMin = 40,
+                official = true,
+                note = "末班 18:30，晚上回校区请预留换乘时间",
             ),
-            note = "建发悦城在「建发悦城」站下；从校区坐 107 路到童游农贸换乘",
+            note = "去建发悦城的唯一公交方案：107 路到童游农贸换 1 路（2 元总共）",
         ),
+
+        // ─────────────────── K3 路（不经校区，参考）───────────────────
         BusRoute(
-            name = "K1路（高铁/武夷山 接驳参考）",
-            endpoints = "武夷山景区 ⇄ 高铁南平市站",
-            fare = "10 元",
-            destTags = listOf("动车站"),
-            upSched = DirSchedule(
-                label = "武夷山 → 高铁南平市站（快速通道线）",
-                first = "07:00", last = "20:00",
-                intervalNote = "快速通道线；303 省道线 07:20-19:30",
-                timeOfficial = true,
-                note = "不在校区设站，武夷山方向接驳参考",
-                offPeakIntervalMin = 60,
+            name = "建阳K3路（赤岸小区 ⇄ 高铁南平市站）",
+            shortName = "K3 路",
+            endpoints = "赤岸小区（新区管委会）⇄ 高铁南平市站",
+            fare = "以站牌为准",
+            sceneIds = listOf("rail", "newarea"),
+            servesCampus = false,
+            out = Direction(
+                label = "赤岸小区（新区管委会） → 高铁南平市站",
+                first = "06:40", last = "21:40",
+                intervalMin = 25,
+                fromCampus = true,
+                official = true,
+                stops = listOf(
+                    "赤岸小区（新区管委会）", "嘉禾北路", "万达广场西", "行政服务中心", "崇和里",
+                    "云谷校区", "瑞云苑西", "福康苑（体育公园）", "市民广场（南平市行政中心）",
+                    "建阳路北路口", "法治公园", "林后大街路口", "市委党校", "山尾路",
+                    "将口电信", "高铁南平市站",
+                ),
+                note = "⚠️ 不经校区。需先在「万达广场西/嘉禾北路」换乘 103 路",
             ),
-            downSched = DirSchedule(
-                label = "高铁南平市站 → 武夷山",
-                first = "08:20", last = "22:45",
-                intervalNote = "快速通道线；303 省道线 08:45-22:00",
-                timeOfficial = true,
-                offPeakIntervalMin = 60,
+            back = Direction(
+                label = "高铁南平市站 → 赤岸小区（新区管委会）",
+                first = "07:40", last = "23:50",
+                intervalMin = 25,
+                official = true,
+                stops = listOf(
+                    "高铁南平市站", "将口电信", "山尾路", "市委党校", "林后大街路口", "法治公园",
+                    "南林公园", "市民广场（南平市行政中心）", "福康苑（体育公园）", "和谐苑",
+                    "云谷校区", "崇善里", "行政服务中心", "万达广场南", "嘉禾北路",
+                    "赤岸小区（新区管委会）",
+                ),
+                note = "末班 23:50 对接高铁到站",
             ),
-            note = "去武夷山玩的参考线；从校区去高铁站先乘定制公交或 K2",
+            note = "行政中心直达高铁线，对校区学生只是换乘参考；直达请用定制公交或 K2",
+        ),
+
+        // ─────────────────── K1 路（不经校区，参考）───────────────────
+        BusRoute(
+            name = "K1路（武夷山 ⇄ 高铁南平市站）",
+            shortName = "K1 路",
+            endpoints = "武夷广场 ⇄ 高铁南平市站（分快线 / 省道线两套时刻）",
+            fare = "以站牌为准",
+            sceneIds = listOf("rail"),
+            servesCampus = false,
+            out = Direction(
+                label = "武夷广场 → 高铁南平市站",
+                first = "07:00", last = "20:35",
+                intervalMin = 60,
+                fromCampus = true,
+                official = true,
+                note = "省道线 07:00-20:35；另有 K1 快线 20:05-21:00（夜间高铁接驳）",
+            ),
+            back = Direction(
+                label = "高铁南平市站 → 武夷广场",
+                first = "08:20", last = "21:50",
+                intervalMin = 60,
+                official = true,
+                note = "省道线 08:20-21:50；另有 K1 快线 20:10-23:00",
+            ),
+            note = "⚠️ 不在校区设站。去武夷山玩的话，先从校区坐定制公交/K2 到高铁站再换 K1",
         ),
     )
 
-    // 说明（v4.13 清理）：原 departureTimes() / lastIsStamped() 是「推算时刻表」的配套工具，
-    // 该功能已在 v4.10 按用户要求撤除，界面只保留首末班 + 间隔 + 去/返程方向标注，
-    // 两函数自此无任何调用点，属死代码，已移除（如需恢复见 git 历史）。
+    /** 按场景取线路（保持 [routes] 的原始顺序） */
+    fun routesForScene(sceneId: String): List<BusRoute> =
+        routes.filter { sceneId in it.sceneIds }
+
+    /** 全部线路里出现过的场景 id（用于过滤空分组） */
+    fun activeSceneIds(): List<String> = SCENES.map { it.id }.filter { routesForScene(it).isNotEmpty() }
+
+    val SOURCE_NOTE =
+        "数据核对 2026-10-25：建阳公交官方公告（首末班夏季表 2026-05-28 / 107 优化 2026-07-29 / " +
+            "105 优化 2026-05-15 / K3 优化 2025-11-11）+ 大武夷新闻网 2025-08-27 开线公告。\n" +
+            "首末班为**起点站发车时间**，校区是中途站，实际到站约晚 3~8 分钟；间隔来自实测与掌上公交，非官方。" +
+            "$ZS_BUS_TIP · 服务热线 $SERVICE_HOTLINE"
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// 发车时刻估算（纯函数，可单测）
+// ══════════════════════════════════════════════════════════════════════
+
+/** "07:30" → LocalTime；解析失败返回 null */
+fun parseHhMm(s: String): LocalTime? = runCatching {
+    val parts = s.split(":")
+    if (parts.size != 2) return null
+    LocalTime.of(parts[0].toInt(), parts[1].toInt())
+}.getOrNull()
+
+/** LocalTime → "07:30" */
+fun formatHhMm(t: LocalTime): String = "%02d:%02d".format(t.hour, t.minute)
+
+/** 某时刻所属时段的发车间隔（高峰优先，其次平峰，兜底 20 分钟） */
+fun intervalAt(d: Direction, t: LocalTime): Int {
+    val pf = d.peakFrom?.let { parseHhMm(it) }
+    val pt = d.peakTo?.let { parseHhMm(it) }
+    val peak = d.peakIntervalMin
+    if (pf != null && pt != null && peak != null && !t.isBefore(pf) && !t.isAfter(pt)) return peak
+    return d.intervalMin ?: peak ?: 20
+}
+
+/**
+ * 估算 [now] 之后的下几班发车时间。
+ *
+ * ⚠️ **这是估算，不是实时数据**：用「首班 + 间隔」线性推算，官方并未公布逐班时刻。
+ * 调用方必须在 UI 上标注「约」，不能让学生以为是精确时刻。
+ *
+ * 规则：
+ * - 有 [Direction.fixedTimes] → 直接用官方固定班次，**不推算**
+ * - 首末班缺失 → 返回空（无法估算）
+ * - [now] 已过末班 → 返回空（调用方应提示「今日末班已过」）
+ *
+ * @return 最多 [count] 个 "HH:mm"
+ */
+fun estimateNext(d: Direction, now: LocalTime, count: Int = 3): List<String> {
+    d.fixedTimes?.let { fixed ->
+        return fixed.mapNotNull { parseHhMm(it) }
+            .filter { !it.isBefore(now) }
+            .take(count)
+            .map { formatHhMm(it) }
+    }
+    val first = parseHhMm(d.first) ?: return emptyList()
+    val last = parseHhMm(d.last) ?: return emptyList()
+    if (now.isAfter(last)) return emptyList()
+
+    val out = mutableListOf<String>()
+    var t = first
+    var guard = 0
+    while (!t.isAfter(last) && out.size < count && guard++ < 500) {
+        if (!t.isBefore(now)) out.add(formatHhMm(t))
+        t = t.plusMinutes(intervalAt(d, t).toLong())
+    }
+    return out
+}
+
+/** 距离末班还剩多少分钟；已过末班返回负数，无末班信息返回 null */
+fun minutesUntilLast(d: Direction, now: LocalTime): Long? {
+    val last = parseHhMm(d.last) ?: return null
+    return java.time.Duration.between(now, last).toMinutes()
+}
+
+/**
+ * 从校区站到 [target] 还有几站。
+ *
+ * @return null = 该方向不途经（或站点数据缺失），调用方不要显示站数
+ */
+fun stopsFromCampus(d: Direction, target: String): Int? {
+    if (target.isBlank()) return null
+    val i = d.stops.indexOfFirst { it == BusData.CAMPUS_STOP }
+    val j = d.stops.indexOfFirst { it == target }
+    if (i < 0 || j < 0 || j <= i) return null
+    return j - i
 }
