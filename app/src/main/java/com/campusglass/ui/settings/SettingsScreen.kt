@@ -17,14 +17,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import com.campusglass.ui.motion.MotionPrefs
+import com.campusglass.ui.motion.motionSpec
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,6 +40,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -69,6 +67,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import com.campusglass.ui.motion.pressable
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -110,6 +110,7 @@ private val credits = listOf(
 )
 
 private val changelog = listOf(
+    "v5.5.nmyx · 2026-10-31" to "动效全面返工 + 可自定义：① 切 Tab 从「横滑 1/4 屏」改成淡入淡出（fade-through），并修掉一个真 bug——从首页上滑把底栏藏起来后切到别的页面，底栏仍是藏着的，等于没有导航入口；② 底栏隐藏阈值从单帧 12px 改成累计 28dp（不再一蹭就藏），当前页高亮块改为按 tab 序号插值滑动、图标放大 7%；③ 卡片/按钮/色点统一按压缩放与弹性回弹，快递页支持清单展开带动画与箭头旋转，课表切周 Crossfade、FAB 缩放淡入，设置页致谢展开带动画；④ 设置页新增「✨ 动效」卡片，五个旋钮自己调——动画速度（很慢/慢/标准/快，时长按倍率、弹簧刚度按平方）、按压反馈（关闭/标准/明显）、Tab 切换（淡入淡出/无动画）、减少动效（无障碍：去掉位移缩放只留短淡入淡出）、底栏随滑动隐藏（可关），底部有实时预览与「恢复默认动效」；⑤ 动效令牌重构成 MotionSpec + buildMotionSpec() 纯函数，档位存 SharedPreferences（存枚举下标，以后加档位不会错位老配置），新增 8 条单测，总单测 70 → 78",
     "v5.4.nmyx · 2026-10-25" to "公交模块整体重写：① 数据重新联网核对，修正多处错误——103 路首末班此前搞反（把万达的 7:30 当成新岭总站的）、107 路仍是 2026-08-01 前的旧走向（已改走兴业路林后村，取消滨江壹号/崇阳北路/实业集团/广信街/嘉禾北路）、105 路站点只录了一半（实际 25 站）、K2/K3 末班应为 23:50、K3 站名「明德里」应为「崇和里」；② 界面按目的地分组（万达/市区/高铁站/建发悦城/火车站/新区），每张卡直接给票价、几站、几分钟一班、从校区上车的首末班；③ 显示下一班大概几点（估算），末班已过会提示明日首班；④ 不经校区的 K3/K1/建阳1路 保留但标灰并写明怎么换乘；⑤ 详情页改全屏，站点用竖向时间轴、校区站高亮，还能切换「从校区出发/回校区」两个方向；⑥ 新增 28 条单测锁住核对结果",
     "v5.3.nmyx · 2026-10-18" to "设置页瘦身与更新日志改版：① 致谢列表默认收起（原来 9 张卡片平铺，把设置页拉得很长，现在点一下才展开，展开/收起带撑开与淡入淡出动画、箭头同步旋转）；② 设置页底部原有的「版本修改日志」区块已移除，改为独立的全屏更新日志页面（从「关于」卡片的按钮或检查更新弹窗进入，当前版本高亮并标注「当前版本」）；③ 检查更新时如果已是最新版本，弹窗内会直接显示本版更新内容，不用再翻日志",
     "v5.2.nmyx · 2026-10-16" to "课表配色改进：修复「同一门课在不同时段颜色不一样」——此前配色把星期与节次也混进了计算，现已改为只按课程名分配；12 色调色板内每门不同的课各占一色、尽量不撞色（超过 12 门才回绕）；按名字而非出现顺序分配，因此增删课、切换周次都不会让已有课程换色；桌面小部件的课程色条同步采用同一套逻辑，两处颜色一致",
@@ -354,6 +355,109 @@ fun SettingsScreen() {
             }
         }
 
+        // ---- ✨ 动效（v5.5：手感交给用户自己调，改完立刻生效）----
+        item {
+            AcrylicCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("✨ 动效", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "全应用的动效都从这里取参数：底栏进出、Tab 切换、展开收起、按压回弹。改完立即生效。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+
+                    Text("动画速度", style = MaterialTheme.typography.bodySmall)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(MotionPrefs.Speed.entries.toList()) { s ->
+                            FilterChip(
+                                selected = MotionPrefs.speed.value == s,
+                                onClick = { MotionPrefs.setSpeed(context, s) },
+                                label = { Text(s.label, style = MaterialTheme.typography.labelSmall) },
+                            )
+                        }
+                    }
+
+                    Text("按压反馈", style = MaterialTheme.typography.bodySmall)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(MotionPrefs.Press.entries.toList()) { p ->
+                            FilterChip(
+                                selected = MotionPrefs.press.value == p,
+                                onClick = { MotionPrefs.setPress(context, p) },
+                                label = { Text(p.label, style = MaterialTheme.typography.labelSmall) },
+                            )
+                        }
+                    }
+
+                    Text("Tab 切换", style = MaterialTheme.typography.bodySmall)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(MotionPrefs.TabStyle.entries.toList()) { t ->
+                            FilterChip(
+                                selected = MotionPrefs.tabStyle.value == t,
+                                onClick = { MotionPrefs.setTabStyle(context, t) },
+                                label = { Text(t.label, style = MaterialTheme.typography.labelSmall) },
+                            )
+                        }
+                    }
+
+                    MotionSwitchRow(
+                        title = "底栏随滑动隐藏",
+                        desc = "向下滑内容时收起底栏，向上滑再出现；关掉则底栏常驻",
+                        checked = MotionPrefs.barAutoHide.value,
+                    ) { MotionPrefs.setBarAutoHide(context, it) }
+
+                    MotionSwitchRow(
+                        title = "减少动效",
+                        desc = "无障碍选项：去掉位移与缩放，只保留短淡入淡出",
+                        checked = MotionPrefs.reduceMotion.value,
+                    ) { MotionPrefs.setReduceMotion(context, it) }
+
+                    // 实时预览：不用退出去别的页面试手感
+                    val m = motionSpec()
+                    var previewOpen by remember { mutableStateOf(false) }
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pressable(pressedScale = 0.95f) { previewOpen = !previewOpen },
+                    ) {
+                        Column(Modifier.padding(12.dp)) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text("按一下预览（按住能看到按压反馈）", style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    if (previewOpen) "▴" else "▾",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            AnimatedVisibility(
+                                visible = previewOpen,
+                                enter = m.revealEnter,
+                                exit = m.revealExit,
+                            ) {
+                                Text(
+                                    "展开 / 收起就是这个手感；底栏进出、Tab 切换、各处折叠都用同一套令牌。",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                                    modifier = Modifier.padding(top = 8.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = { MotionPrefs.reset(context) },
+                        enabled = !MotionPrefs.isDefault(),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("恢复默认动效") }
+                }
+            }
+        }
+
         // ---- 个性化 ----
         item {
             AcrylicCard(Modifier.fillMaxWidth()) {
@@ -541,9 +645,10 @@ fun SettingsScreen() {
         // 展开 = 从上往下撑开 + 淡入；收起 = 向上收拢 + 淡出；箭头旋转 180°（比直接换 ▾/▴ 字符顺滑）。
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val m = motionSpec()
                 val arrowRot by animateFloatAsState(
                     targetValue = if (creditsExpanded) 180f else 0f,
-                    animationSpec = tween(durationMillis = 220),
+                    animationSpec = m.fluid,
                     label = "creditArrow",
                 )
                 TextButton(
@@ -565,16 +670,12 @@ fun SettingsScreen() {
                             .rotate(arrowRot),
                     )
                 }
+                // 展开/收起统一走 Motion 令牌：展开带一点回弹（内容"弹"出来），收起走高阻尼快速收拢。
+                // 手写 tween 的问题是中段匀速感明显，和底栏、Tab 切换的手感割裂。
                 AnimatedVisibility(
                     visible = creditsExpanded,
-                    enter = expandVertically(
-                        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
-                        expandFrom = Alignment.Top,
-                    ) + fadeIn(animationSpec = tween(durationMillis = 200)),
-                    exit = shrinkVertically(
-                        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-                        shrinkTowards = Alignment.Top,
-                    ) + fadeOut(animationSpec = tween(durationMillis = 140)),
+                    enter = m.revealEnter,
+                    exit = m.revealExit,
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         credits.forEach { c ->
@@ -620,17 +721,67 @@ fun SettingsScreen() {
     }
 }
 
+/** 动效卡片里「标题 + 说明 + 开关」的一行（两块开关共用，省得重复写 Row） */
+@Composable
+private fun MotionSwitchRow(
+    title: String,
+    desc: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(end = 8.dp)) {
+            Text(title, style = MaterialTheme.typography.bodySmall)
+            Text(
+                desc,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+            )
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
 @Composable
 private fun ColorDot(color: Color, label: String, selected: Boolean, onClick: () -> Unit) {
+    // 选中态动画：色点放大 6% + 描一圈边。原来只有文字变粗，选中的是哪个圈很不明显。
+    val m = motionSpec()
+    val sel by animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = if (m.reduceMotion) {
+            androidx.compose.animation.core.tween(0)
+        } else {
+            m.fluid
+        },
+        label = "colorDotSel",
+    )
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.pressable(pressedScale = 0.9f, onClick = onClick),
     ) {
         Box(
             Modifier
                 .size(34.dp)
+                .graphicsLayer {
+                    val s = 1f + 0.06f * sel
+                    scaleX = s
+                    scaleY = s
+                }
                 .clip(CircleShape)
                 .background(color)
+                .then(
+                    if (sel > 0.01f) {
+                        Modifier.border(
+                            width = (1.5f + 1f * sel).dp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f * sel),
+                            shape = CircleShape,
+                        )
+                    } else Modifier
+                )
         )
         Text(
             label,

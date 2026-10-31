@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.tween
+import com.campusglass.ui.motion.motionSpec
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,6 +64,8 @@ import kotlinx.coroutines.withContext
 @Composable
 fun AutoUpdateHost() {
     val context = LocalContext.current
+    // 更新横幅和底栏共用一套动效令牌（用户可在设置里调速度 / 减少动效）
+    val m = motionSpec()
     var result by remember { mutableStateOf<UpdateCheck?>(null) }
     var bannerDismissed by remember { mutableStateOf(false) }
     var showDialog by remember { mutableStateOf(false) }
@@ -98,8 +101,9 @@ fun AutoUpdateHost() {
         AnimatedVisibility(
             visible = !bannerDismissed,
             modifier = Modifier.align(Alignment.BottomCenter),
-            enter = slideInVertically(tween(260)) { it } + fadeIn(tween(200)),
-            exit = slideOutVertically(tween(200)) { it } + fadeOut(tween(150)),
+            // 和底栏隐藏/出现同一套弹簧：从下方带阻尼顶上来，消失时快速退下
+            enter = m.barEnter,
+            exit = m.barExit,
         ) {
             Surface(
                 color = MaterialTheme.colorScheme.primaryContainer,

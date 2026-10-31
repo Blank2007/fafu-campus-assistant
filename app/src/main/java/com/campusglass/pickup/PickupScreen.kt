@@ -5,6 +5,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -45,7 +47,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.unit.dp
+import com.campusglass.ui.motion.motionSpec
 import androidx.core.net.toUri
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -202,17 +206,34 @@ fun PickupScreen() {
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
                 )
                 // v4.16：把「支持哪些快递」直接摆在说明旁边（默认收起，点开看全）
+                // 动效：箭头旋转 90°（▸→▾ 的旋转比换字符顺滑，也和设置页致谢箭头一致）；
+                //       清单用展开/收起动画，不再是点击瞬间"蹦"出一大段文字。
+                val m = motionSpec()
+                val caretRot by animateFloatAsState(
+                    targetValue = if (showSupported) 90f else 0f,
+                    animationSpec = m.fluid,
+                    label = "supportedCaret",
+                )
                 TextButton(
                     onClick = { showSupported = !showSupported },
                     contentPadding = PaddingValues(0.dp),
                 ) {
                     Text(
-                        if (showSupported) "▾ 收起支持清单（${ExpressApi.SUPPORTED_COURIERS.size} 家）"
-                        else "▸ 支持哪些快递？",
+                        if (showSupported) "收起支持清单（${ExpressApi.SUPPORTED_COURIERS.size} 家）"
+                        else "支持哪些快递？",
                         style = MaterialTheme.typography.labelSmall,
                     )
+                    Text(
+                        "▸",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(start = 3.dp).rotate(caretRot),
+                    )
                 }
-                if (showSupported) {
+                AnimatedVisibility(
+                    visible = showSupported,
+                    enter = m.revealEnter,
+                    exit = m.revealExit,
+                ) {
                     Text(
                         ExpressApi.SUPPORTED_COURIERS.joinToString("、"),
                         style = MaterialTheme.typography.labelSmall,
@@ -315,16 +336,38 @@ fun PickupScreen() {
                             }
                         } else {
                             // v4.15：轨迹长时先折叠，只显示最近 COLLAPSE_AT 条
+                            // 动效：折叠部分改用 AnimatedVisibility 包住"多出来的那几条"，
+                            //       展开时从 0 高度长出来，收起时向上收拢。
+                            //       原来用 take() 直接增删列表 → 高度瞬间跳变，看不到任何过渡。
+                            val m = motionSpec()
                             val collapsible = r.traces.size > COLLAPSE_AT
-                            val shown = if (collapsible && !expanded) r.traces.take(COLLAPSE_AT) else r.traces
-                            shown.forEachIndexed { i, t ->
+                            val head = if (collapsible) r.traces.take(COLLAPSE_AT) else r.traces
+                            val extra = if (collapsible) r.traces.drop(COLLAPSE_AT) else emptyList()
+                            head.forEachIndexed { i, t ->
                                 Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                     Text(t.time, style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.primary)
                                     Text(t.context, style = MaterialTheme.typography.bodySmall,
                                         fontWeight = if (i == 0) FontWeight.Bold else FontWeight.Normal)
                                 }
-                                if (i != shown.size - 1) HorizontalDivider()
+                                if (i != head.lastIndex) HorizontalDivider()
+                            }
+                            AnimatedVisibility(
+                                visible = expanded,
+                                enter = m.revealEnter,
+                                exit = m.revealExit,
+                            ) {
+                                Column {
+                                    if (extra.isNotEmpty()) HorizontalDivider()
+                                    extra.forEachIndexed { j, t ->
+                                        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                            Text(t.time, style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary)
+                                            Text(t.context, style = MaterialTheme.typography.bodySmall)
+                                        }
+                                        if (j != extra.lastIndex) HorizontalDivider()
+                                    }
+                                }
                             }
                             if (collapsible) {
                                 TextButton(onClick = { expanded = !expanded }) {

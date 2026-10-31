@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.clickable
+import com.campusglass.ui.motion.pressable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.Image
@@ -159,7 +160,7 @@ fun HomeScreen(onGoto: (String) -> Unit) {
                     Modifier
                         .fillMaxWidth()
                         .widthIn(max = 380.dp)
-                        .clickable {
+                        .pressable(pressedScale = 0.97f) {
                             if (quote != null) {
                                 copyText("每日一句", "「${quote!!.text}」 —— ${quote!!.from}")
                             }
@@ -376,7 +377,7 @@ fun HomeScreen(onGoto: (String) -> Unit) {
                         Box(
                             Modifier
                                 .fillMaxWidth()
-                                .clickable { copyText("请假模板", LEAVE_TEMPLATE) },
+                                .pressable(pressedScale = 0.985f) { copyText("请假模板", LEAVE_TEMPLATE) },
                         ) {
                             Text(
                                 LEAVE_TEMPLATE,

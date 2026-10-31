@@ -1,7 +1,6 @@
 package com.campusglass
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.clickable
 import androidx.compose.ui.unit.sp
 import com.campusglass.ui.glass.hairlineBorder
 
@@ -15,14 +14,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -66,8 +59,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.foundation.border
 import androidx.compose.ui.unit.dp
@@ -79,6 +74,11 @@ import com.campusglass.ui.glass.acrylic
 import com.campusglass.ui.glass.glassBackground
 import com.campusglass.ui.glass.rememberGlassState
 import com.campusglass.ui.home.HomeScreen
+import com.campusglass.ui.motion.LocalMotion
+import com.campusglass.ui.motion.MotionPrefs
+import com.campusglass.ui.motion.motionSpec
+import com.campusglass.ui.motion.rememberMotionSpec
+import com.campusglass.ui.motion.pressable
 import com.campusglass.ui.settings.SettingsScreen
 import com.campusglass.ui.theme.CampusGlassTheme
 import com.campusglass.ui.theme.ThemePrefs
@@ -108,6 +108,7 @@ class MainActivity : ComponentActivity() {
         WidgetNav.pendingTab.value = intent?.getStringExtra("openTab")   // 小部件带参直达
         intent?.removeExtra("openTab")                                  // A1：消费后移除，旋转不再弹回
         ThemePrefs.load(this)
+        MotionPrefs.load(this)                             // v5.5：动效偏好（设置页可调）
         com.campusglass.update.UpdatePolicy.load(this)     // v4.18：启动自动检查更新的用户偏好
         setContent {
             CampusGlassTheme {
@@ -127,9 +128,12 @@ class MainActivity : ComponentActivity() {
                         onExit = { finish() },
                     )
                 }
-                CampusGlassApp()
-                // v4.18：启动时按用户偏好自动检查更新（OFF 时不联网）
-                com.campusglass.update.AutoUpdateHost()
+                // v5.5：把用户调好的动效令牌注入整棵树（含 AutoUpdateHost 的更新横幅）
+                CompositionLocalProvider(LocalMotion provides rememberMotionSpec()) {
+                    CampusGlassApp()
+                    // v4.18：启动时按用户偏好自动检查更新（OFF 时不联网）
+                    com.campusglass.update.AutoUpdateHost()
+                }
             }
         }
     }
@@ -167,7 +171,16 @@ private enum class Tab(val label: String, val icon: ImageVector) {
  */
 @Composable
 fun CampusGlassApp() {
+    // 动效令牌按用户偏好现取（设置页一改，这里立刻重组）
+    val m = motionSpec()
     var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
+    // 选中位置用一个连续浮点插值（0..4）：底栏指示块在 Tab 之间"滑过去"，
+    // 而不是瞬间换色 —— 手指点哪，高亮就从上一个位置跑过去，方向感最直观。
+    val selPos by animateFloatAsState(
+        targetValue = tab.ordinal.toFloat(),
+        animationSpec = m.fluid,
+        label = "tabSelPos",
+    )
     // 小部件点击直达课表页
     androidx.compose.runtime.LaunchedEffect(WidgetNav.pendingTab.value) {
         WidgetNav.pendingTab.value?.let { k ->
@@ -185,11 +198,32 @@ fun CampusGlassApp() {
 
     // 底栏自动隐藏：内容下滑隐藏，上滑出现
     var barVisible by rememberSaveable { mutableStateOf(true) }   // A2
-    val scrollConn = remember {
+    // 切 Tab 时内容自动回到顶部，底栏必须跟着重新出现，否则新页面根本没有导航入口
+    androidx.compose.runtime.LaunchedEffect(tab) { barVisible = true }
+    // 滞后判定：下滑要累计超过 28dp 才隐藏（列表轻微回弹不再让底栏"抖"），上滑则立刻出现
+    val hideThresholdPx = with(LocalDensity.current) { 28.dp.toPx() }
+    // 用户在设置里关掉「底栏自动隐藏」时，底栏必须常驻（否则界面又没有导航入口了）
+    val autoHide = m.barAutoHide
+    androidx.compose.runtime.LaunchedEffect(autoHide) { if (!autoHide) barVisible = true }
+    val scrollConn = remember(hideThresholdPx, autoHide) {
         object : NestedScrollConnection {
+            /** 本次下滑的累计位移（向上滑立即清零） */
+            var downAcc = 0f
+
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (available.y < -12f) barVisible = false
-                else if (available.y > 12f) barVisible = true
+                if (!autoHide) return Offset.Zero
+                val dy = available.y
+                if (dy > 0f) {
+                    // 上滑：出现要快，不留滞后
+                    downAcc = 0f
+                    if (!barVisible) barVisible = true
+                } else if (dy < 0f && barVisible) {
+                    downAcc -= dy
+                    if (downAcc > hideThresholdPx) {
+                        barVisible = false
+                        downAcc = 0f
+                    }
+                }
                 return Offset.Zero
             }
         }
@@ -217,8 +251,8 @@ fun CampusGlassApp() {
                 bottomBar = {
                     AnimatedVisibility(
                         visible = barVisible,
-                        enter = slideInVertically(tween(220)) { it },
-                        exit = slideOutVertically(tween(180)) { it },
+                        enter = m.barEnter,
+                        exit = m.barExit,
                     ) {
                         Box(
                             Modifier
@@ -245,14 +279,18 @@ fun CampusGlassApp() {
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Tab.entries.forEach { t ->
-                                    val sel = tab == t
-                                    val tint = if (sel) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                                    // 高亮强度 = 1 - 距离（选中项 1，相邻项随插值连续衰减）
+                                    val sel = (1f - kotlin.math.abs(t.ordinal - selPos)).coerceIn(0f, 1f)
+                                    val tint = androidx.compose.ui.graphics.lerp(
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                                        MaterialTheme.colorScheme.primary,
+                                        sel,
+                                    )
                                     Column(
                                         Modifier
                                             .weight(1f)
                                             .clip(RoundedCornerShape(18.dp))
-                                            .clickable { tab = t }
+                                            .pressable(pressedScale = 0.93f) { tab = t }
                                             .padding(vertical = 9.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally,
                                     ) {
@@ -260,14 +298,23 @@ fun CampusGlassApp() {
                                             Modifier
                                                 .clip(RoundedCornerShape(16.dp))
                                                 .background(
-                                                    if (sel) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
-                                                    else Color.Transparent
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.16f * sel)
                                                 )
                                                 .padding(horizontal = 14.dp, vertical = 5.dp),
                                             contentAlignment = Alignment.Center,
                                         ) {
                                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Icon(t.icon, contentDescription = t.label, tint = tint)
+                                                Icon(
+                                                    t.icon,
+                                                    contentDescription = t.label,
+                                                    tint = tint,
+                                                    modifier = Modifier.graphicsLayer {
+                                                        // 选中图标轻轻放大一点点（1.0 → 1.07）
+                                                        val s = 1f + 0.07f * sel
+                                                        scaleX = s
+                                                        scaleY = s
+                                                    },
+                                                )
                                                 Text(
                                                     t.label,
                                                     style = MaterialTheme.typography.labelSmall,
@@ -292,12 +339,9 @@ fun CampusGlassApp() {
                 ) {
                     AnimatedContent(
                         targetState = tab,
-                        transitionSpec = {
-                            val forward = targetState.ordinal >= initialState.ordinal
-                            val dir = if (forward) 1 else -1
-                            (fadeIn(tween(220)) + slideInHorizontally(tween(260)) { it / 4 * dir }) togetherWith
-                                (fadeOut(tween(160)) + slideOutHorizontally(tween(260)) { -it / 4 * dir })
-                        },
+                        // fade-through：旧页 110ms 先退，新页淡入 + 轻微放大归位。
+                        // 不再横向滑 1/4 屏 —— 底栏 Tab 是"换内容"不是"翻页"，横向位移会让人误以为能左右滑。
+                        transitionSpec = { m.tabEnter togetherWith m.tabExit },
                         label = "tab",
                     ) { t ->
                         when (t) {

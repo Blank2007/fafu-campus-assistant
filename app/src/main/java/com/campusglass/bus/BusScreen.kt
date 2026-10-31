@@ -2,6 +2,7 @@ package com.campusglass.bus
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import com.campusglass.ui.motion.pressable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -181,7 +182,7 @@ private fun RouteCard(
         Modifier
             .fillMaxWidth()
             .alpha(dim)
-            .clickable(onClick = onClick),
+            .pressable(pressedScale = 0.97f, onClick = onClick),
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

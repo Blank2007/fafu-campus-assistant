@@ -53,7 +53,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.unit.dp
+import com.campusglass.ui.motion.motionSpec
 import androidx.compose.ui.unit.sp
 import com.campusglass.ui.theme.ThemePrefs
 import com.campusglass.ui.widgets.ScreenHeader
@@ -356,7 +364,23 @@ fun ScheduleScreen() {
             }
 
             item { HolidayBanner(week) }
-            item { Timetable(courses, week) { detailId = it.id } }
+            // 切周时整张课表瞬间换掉会很"硬"：用 Crossfade 让旧周淡出、新周淡入，
+            // 过渡时间和 Tab 切换同一档（Motion.fadeThrough），全应用手感一致。
+            item {
+                val m = motionSpec()
+                // 「减少动效」时直接换表，不做 Crossfade（整张大表交叉淡入对前庭敏感的人不友好）
+                if (m.reduceMotion) {
+                    Timetable(courses, week) { detailId = it.id }
+                } else {
+                    Crossfade(
+                        targetState = week,
+                        animationSpec = m.fadeThrough,
+                        label = "timetableWeek",
+                    ) { w ->
+                        Timetable(courses, w) { detailId = it.id }
+                    }
+                }
+            }
         }
 
         Column(
@@ -366,7 +390,14 @@ fun ScheduleScreen() {
         ) {
             // V4-6：查看其他周时，可一键回到当前周
             val curWeekNow = ScheduleStore.currentWeek(context)
-            if (week != curWeekNow) {
+            val m = motionSpec()
+            // 出现/消失都做缩放+淡入淡出，避免 FAB 凭空闪现（点后面容易被吓一跳）；
+            // 时长统一走动效令牌，跟着设置里的「动画速度」走。「减少动效」时只淡入淡出，不缩放。
+            AnimatedVisibility(
+                visible = week != curWeekNow,
+                enter = if (m.reduceMotion) fadeIn(m.quick) else fadeIn(m.quick) + scaleIn(m.fluid, initialScale = 0.85f),
+                exit = if (m.reduceMotion) fadeOut(m.quick) else fadeOut(m.quick) + scaleOut(m.quick, targetScale = 0.85f),
+            ) {
                 ExtendedFloatingActionButton(
                     onClick = { week = curWeekNow },
                     containerColor = MaterialTheme.colorScheme.secondaryContainer,
