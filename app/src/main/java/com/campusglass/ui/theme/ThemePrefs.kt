@@ -10,7 +10,7 @@ import androidx.compose.ui.graphics.Color
 /**
  * 外观与个性化偏好（设置页可改，持久化）：
  * 主题模式（跟随系统/浅色/深色）· 主题色（7推荐+系统+自定义调色盘）·
- * 亚克力开关 · 自定义背景（含裁切模式）· 课表字号/周末列。
+ * 亚克力开关 · 底栏液态玻璃 · 自定义背景（含裁切模式）· 课表字号/周末列。
  */
 object ThemePrefs {
 
@@ -19,6 +19,7 @@ object ThemePrefs {
 
     val themeMode = mutableStateOf(ThemeMode.SYSTEM)   // 深色模式三态
     val acrylicEnabled = mutableStateOf(true)          // 全局亚克力开关
+    val liquidGlassEnabled = mutableStateOf(true)      // 底栏液态玻璃（v5.6，默认开）
 
     /** 0=系统主题色(动态) 1..7=推荐色 8=自定义(调色盘) */
     val themeColorIndex = mutableIntStateOf(0)
@@ -51,6 +52,7 @@ object ThemePrefs {
             ThemeMode.valueOf(p.getString("themeMode", "SYSTEM") ?: "SYSTEM")
         }.getOrDefault(ThemeMode.SYSTEM)
         acrylicEnabled.value = p.getBoolean("acrylic", true)
+        liquidGlassEnabled.value = p.getBoolean("liquidBar", true)
         themeColorIndex.value = p.getInt("colorIdx", 0).coerceIn(0, 8)
         customColor.value = Color(p.getLong("customColor", 0xFF3B5BFFL).toInt())   // ARGB Int 约定（P0-3）
         colorStyle.value = p.getInt("colorStyle", 0).coerceIn(0, 2)
@@ -71,6 +73,12 @@ object ThemePrefs {
     fun setAcrylic(c: Context, on: Boolean) {
         acrylicEnabled.value = on
         prefs(c).edit().putBoolean("acrylic", on).apply()
+    }
+
+    /** 底栏液态玻璃（v5.6）：关掉后底栏退回纯色面板 */
+    fun setLiquidGlass(c: Context, on: Boolean) {
+        liquidGlassEnabled.value = on
+        prefs(c).edit().putBoolean("liquidBar", on).apply()
     }
 
     fun setColorIndex(c: Context, idx: Int) {

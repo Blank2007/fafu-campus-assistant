@@ -2,7 +2,16 @@ package com.campusglass
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.unit.sp
-import com.campusglass.ui.glass.hairlineBorder
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.InnerShadow
+import com.kyant.backdrop.shadow.Shadow
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -19,6 +28,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
@@ -53,11 +66,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -189,6 +204,15 @@ fun CampusGlassApp() {
         }
     }
     val glass = rememberGlassState()
+    // ---- 液态玻璃采样源（v5.6）----
+    // drawBackdrop 需要「被采样的背景」是一个真实的 GraphicsLayer：
+    //   bgBackdrop      ← 背景（纯色 / 壁纸），全屏
+    //   contentBackdrop ← 页面内容（卡片、列表）
+    // 两者合成后喂给底栏。底栏自己绝不能落在记录层里，否则会采到上一帧的自己（无限镜 / 拖影），
+    // 所以这里只记录「背景 + 内容区」，与底栏（Scaffold 内 bottomBar）同级但互不包含。
+    val bgBackdrop = rememberLayerBackdrop()
+    val contentBackdrop = rememberLayerBackdrop()
+    val barBackdrop = rememberCombinedBackdrop(bgBackdrop, contentBackdrop)
     val dark = when (ThemePrefs.themeMode.value) {
         ThemePrefs.ThemeMode.DARK -> true
         ThemePrefs.ThemeMode.LIGHT -> false
@@ -230,7 +254,9 @@ fun CampusGlassApp() {
     }
 
     Box(Modifier.fillMaxSize()) {
-        AppBackground(glass)
+        Box(Modifier.fillMaxSize().layerBackdrop(bgBackdrop)) {
+            AppBackground(glass)
+        }
 
         CompositionLocalProvider(
             LocalGlass provides glass,
@@ -261,23 +287,92 @@ fun CampusGlassApp() {
                                 .padding(start = 18.dp, end = 18.dp, bottom = 10.dp),
                             contentAlignment = Alignment.BottomCenter,
                         ) {
-                            val barModifier = if (acrylicOn) {
-                                Modifier
-                                    .fillMaxWidth()
-                                    .acrylic(glass, dark, shape = RoundedCornerShape(26.dp))
+                            // v5.6：液态玻璃底栏（Kyant0/AndroidLiquidGlass，酷安同款）
+                            // 面板不自己画渐变/描边：模糊、边缘折射、色散、内外阴影全部由库的
+                            // drawBackdrop 完成 —— 它真的去采样背后的图层，而不是"假装透明"。
+                            val barShape = RoundedCornerShape(26.dp)
+                            // 面板底色：真实模糊 + 折射已经给了玻璃感，这层只留很淡的主题色，
+                            // 用于保住图标/文字的对比度；压太重会把背后的内容抹平。
+                            // 深色主题下页面背景本身就是深棕黑，若再压一层深色 tint，面板与背景几乎同色，
+                            // 玻璃感全靠不存在——所以深色用"提亮"策略（一层淡白），浅色用主题色淡染。
+                            val glassTint =
+                                if (dark) Color.White.copy(alpha = 0.14f)
+                                else androidx.compose.ui.graphics.lerp(
+                                    Color.White,
+                                    MaterialTheme.colorScheme.primary,
+                                    0.05f,
+                                ).copy(alpha = 0.50f)
+                            val reduce = MotionPrefs.reduceMotion.value
+                            var pressing by remember { mutableStateOf(false) }
+                            // 液态形变：按下时整条栏极轻微鼓起，强度跟随「按压反馈」设置
+                            val pressScale by animateFloatAsState(
+                                targetValue = if (pressing) {
+                                    1f + 0.012f * MotionPrefs.press.value.strength
+                                } else 1f,
+                                animationSpec = m.fluid,
+                                label = "lgScale",
+                            )
+                            // 只「观察」按下状态，绝不消费事件 —— 否则底栏 Tab 就点不动了
+                            val pressObserver = Modifier.pointerInput(reduce) {
+                                if (reduce) return@pointerInput
+                                awaitPointerEventScope {
+                                    while (true) {
+                                        val e = awaitPointerEvent(
+                                            androidx.compose.ui.input.pointer.PointerEventPass.Initial
+                                        )
+                                        if (e.changes.any { it.pressed }) {
+                                            pressing = true
+                                        } else if (e.changes.isNotEmpty()) {
+                                            pressing = false
+                                        }
+                                    }
+                                }
+                            }
+                            // 设置里关掉液态玻璃时退回纯色面板（默认开）
+                            val liquidOn = ThemePrefs.liquidGlassEnabled.value
+                            val barSurface: Modifier = if (liquidOn) {
+                                Modifier.drawBackdrop(
+                                    backdrop = barBackdrop,
+                                    shape = { barShape },
+                                    effects = {
+                                        vibrancy()                            // 提亮背景色彩，玻璃才"透"
+                                        blur(6.dp.toPx())                     // 背后真实模糊
+                                        lens(22.dp.toPx(), 26.dp.toPx())      // 边缘折射（液态玻璃的灵魂）
+                                    },
+                                    highlight = {
+                                        Highlight.Default.copy(alpha = if (dark) 0.9f else 1f)
+                                    },
+                                    shadow = { Shadow(alpha = if (dark) 0.6f else 0.45f) },
+                                    innerShadow = {
+                                        InnerShadow(radius = 6.dp, alpha = if (dark) 0.45f else 0.25f)
+                                    },
+                                    onDrawSurface = { drawRect(glassTint) },
+                                )
                             } else {
                                 Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(26.dp))
+                                    .clip(barShape)
                                     .background(MaterialTheme.colorScheme.surface)
                             }
-                            val hairline = MaterialTheme.colorScheme.outline.copy(
-                                alpha = if (dark) 0.35f else 0.22f
-                            )
-                            Row(
-                                modifier = barModifier.hairlineBorder(hairline),
-                                verticalAlignment = Alignment.CenterVertically,
+                            BoxWithConstraints(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .graphicsLayer {
+                                        scaleX = pressScale
+                                        scaleY = pressScale
+                                    }
                             ) {
+                                val tabW = maxWidth / Tab.entries.size
+                                // 把整条底栏（面板 + 图标文字）录成一层，胶囊用这层做 backdrop —— 否则胶囊的 backdrop
+                                // 只有页面背景，会把压在上面的图标整块不透明地盖掉（实测首页 tab 直接消失）。
+                                val barLayer = rememberLayerBackdrop()
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .then(barSurface)
+                                        .layerBackdrop(barLayer)
+                                        .then(pressObserver),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
                                 Tab.entries.forEach { t ->
                                     // 高亮强度 = 1 - 距离（选中项 1，相邻项随插值连续衰减）
                                     val sel = (1f - kotlin.math.abs(t.ordinal - selPos)).coerceIn(0f, 1f)
@@ -295,12 +390,7 @@ fun CampusGlassApp() {
                                         horizontalAlignment = Alignment.CenterHorizontally,
                                     ) {
                                         Box(
-                                            Modifier
-                                                .clip(RoundedCornerShape(16.dp))
-                                                .background(
-                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.16f * sel)
-                                                )
-                                                .padding(horizontal = 14.dp, vertical = 5.dp),
+                                            Modifier.padding(horizontal = 14.dp, vertical = 5.dp),
                                             contentAlignment = Alignment.Center,
                                         ) {
                                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -326,6 +416,45 @@ fun CampusGlassApp() {
                                     }
                                 }
                             }
+                                // 滑动玻璃胶囊（酷安同款）：选中项不是一块死色块，而是一片真的会折射背后内容的凸透镜，
+                                // 位置随 selPos 连续滑动；半透明，所以图标/文字照样透得出来。
+                                // 选中胶囊用主题色淡染，玻璃底 + 一点品牌色（酷安的配色思路）。
+                                val capsuleTint =
+                                    MaterialTheme.colorScheme.primary.copy(
+                                        alpha = if (dark) 0.20f else 0.18f
+                                    )
+                                if (liquidOn) {
+                                    Box(
+                                        Modifier
+                                            .align(Alignment.CenterStart)
+                                            .offset(x = tabW * selPos + 6.dp)
+                                            .width(tabW - 12.dp)
+                                            .height(52.dp)
+                                            .drawBackdrop(
+                                                backdrop = barLayer,
+                                                shape = { RoundedCornerShape(20.dp) },
+                                                effects = {
+                                                    lens(
+                                                        12.dp.toPx(),
+                                                        16.dp.toPx(),
+                                                        chromaticAberration = true,
+                                                    )
+                                                },
+                                                highlight = {
+                                                    Highlight.Default.copy(alpha = if (dark) 0.8f else 1f)
+                                                },
+                                                shadow = { Shadow(alpha = if (dark) 0.5f else 0.35f) },
+                                                innerShadow = {
+                                                    InnerShadow(radius = 4.dp, alpha = if (dark) 0.55f else 0.30f)
+                                                },
+                                                onDrawSurface = {
+                                                    // 选中胶囊用主题色淡染，酷安那种「玻璃底 + 一点品牌色」
+                                                    drawRect(capsuleTint)
+                                                },
+                                            )
+                                    )
+                                }
+                            }
                         }
                     }
                 },
@@ -336,6 +465,7 @@ fun CampusGlassApp() {
                         .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))
                         .padding(padding)
                         .nestedScroll(scrollConn)
+                        .layerBackdrop(contentBackdrop)
                 ) {
                     AnimatedContent(
                         targetState = tab,
@@ -396,7 +526,25 @@ private fun AppBackground(glass: dev.chrisbanes.haze.HazeState) {
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background)
                 .glassBackground(glass)
-        )
+        ) {
+            // 液态玻璃底栏需要「背后有东西」才能显出玻璃感。无壁纸时整屏是一块纯色，
+            // 玻璃条模糊/折射的都是一模一样的像素 —— 结果就是与背景彻底融为一体，
+            // 只剩一圈描边。这里在屏幕下缘铺一层极淡的主题色柔光，
+            // 给玻璃提供可折射的层次，同时让悬浮底栏与背景自然拉开一档。
+            if (ThemePrefs.liquidGlassEnabled.value) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                0.52f to Color.Transparent,
+                                0.84f to MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                                1f to MaterialTheme.colorScheme.primary.copy(alpha = 0.20f),
+                            )
+                        )
+                )
+            }
+        }
     }
 }
 

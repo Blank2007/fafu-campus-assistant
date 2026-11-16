@@ -14,8 +14,8 @@ android {
         // C-2（审查 v4.10）：targetSdk 收敛到 36（API 37 编译环境非 REL，行为变更未经真机回归）
         minSdk = 31
         targetSdk = 36
-        versionCode = 90
-        versionName = "5.5.nmyx"
+        versionCode = 91
+        versionName = "5.6.nmyx"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -131,4 +131,9 @@ dependencies {
     // chrisbanes/haze, Apache-2.0, https://github.com/chrisbanes/haze
     implementation("dev.chrisbanes.haze:haze:2.0.0")
     implementation("dev.chrisbanes.haze:haze-blur:2.0.0")
+
+    // ---- 液态玻璃（底栏 / 酷安同款）----
+    // Kyant0/AndroidLiquidGlass, Apache-2.0, https://github.com/Kyant0/AndroidLiquidGlass
+    // 提供 drawBackdrop：真实跨图层采样 + 模糊 + 折射(lens) + 色散 + 高光/内阴影
+    implementation("io.github.kyant0:backdrop:2.0.1")
 }
