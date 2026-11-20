@@ -37,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -114,6 +115,9 @@ fun ScheduleScreen() {
     var importTermOverride by rememberSaveable { mutableStateOf(false) }
     var confirmRestore by rememberSaveable { mutableStateOf(false) }   // V4-1
     var confirmReplace by rememberSaveable { mutableStateOf(false) }   // V4-7
+    var zfOpen by rememberSaveable { mutableStateOf(false) }           // v5.7 教务导入页
+    var zfResult by remember { mutableStateOf<ZfsoftParser.ParseResult?>(null) }
+    var zfSource by rememberSaveable { mutableStateOf("") }
 
     val detail = courses.firstOrNull { it.id == detailId }
     val editTarget = courses.firstOrNull { it.id == editId }
@@ -185,6 +189,49 @@ fun ScheduleScreen() {
         showImport = false
         importText = ""
         importError = ""
+        reload()
+    }
+
+    // ---- 教务导入落库（v5.7）：与分享码导入同一套去重/备份/损坏保护规则 ----
+    fun applyExternal(imported: List<Course>, merge: Boolean) {
+        fun key(c: Course) = c.name + "|" + c.weekday + "|" + c.startPeriod + "|" + c.endPeriod +
+            "|" + ScheduleStore.compactWeeks(c.weeks)
+        val distinct = imported.distinctBy { key(it) }
+        if (distinct.isEmpty()) {
+            Toast.makeText(context, "教务课表里没有可导入的课程", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (merge) {
+            val existing = courses.map { key(it) }.toSet()
+            val toAdd = distinct.filterNot { key(it) in existing }
+            if (!ScheduleStore.saveCourses(context, courses + toAdd)) {
+                Toast.makeText(context, "课表数据损坏，已停止写入；请先重置课表", Toast.LENGTH_LONG).show()
+                return
+            }
+            Toast.makeText(
+                context,
+                "已合并导入 " + toAdd.size + " 个时段" +
+                    (if (toAdd.size != distinct.size) "（重复跳过 " + (distinct.size - toAdd.size) + "）" else ""),
+                Toast.LENGTH_LONG,
+            ).show()
+        } else {
+            // 替换前自动备份：与分享码替换导入完全相同的 JSON 结构（「从备份恢复」按此解析）
+            context.getSharedPreferences("schedule", android.content.Context.MODE_PRIVATE)
+                .edit().putString("courses_backup", org.json.JSONArray().let { a ->
+                    courses.forEach { co ->
+                        a.put(org.json.JSONObject()
+                            .put("name", co.name).put("teacher", co.teacher).put("location", co.location)
+                            .put("weekday", co.weekday).put("start", co.startPeriod).put("end", co.endPeriod)
+                            .put("weeks", ScheduleStore.compactWeeks(co.weeks)))
+                    }
+                    a.toString()
+                }).apply()
+            if (!ScheduleStore.saveCourses(context, distinct)) {
+                Toast.makeText(context, "课表数据损坏，已停止写入；请先重置课表", Toast.LENGTH_LONG).show()
+                return
+            }
+            Toast.makeText(context, "已替换为教务课表（" + distinct.size + " 个时段，原课表已备份）", Toast.LENGTH_LONG).show()
+        }
         reload()
     }
 
@@ -304,6 +351,13 @@ fun ScheduleScreen() {
                         modifier = Modifier.weight(1f),
                     ) { Text("📥 导入课表") }
                 }
+                // v5.7：从教务系统直接拉课表（账号登录 / 网页登录两条路）
+                OutlinedButton(
+                    onClick = { zfResult = null; zfSource = ""; zfOpen = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("🏫 从教务系统导入课表（金山学院 / 校本部）")
+                }
                 // V4-1：备份可恢复（不再只写不读）
                 val backup = ScheduleStore.backupInfo(context)
                 if (backup != null) {
@@ -410,6 +464,23 @@ fun ScheduleScreen() {
                 icon = { Icon(Icons.Filled.Add, contentDescription = null) },
                 text = { Text("添加课程") },
             )
+        }
+
+        // ---- 教务导入页（v5.7）：全屏盖在课表之上，自绘返回栏 + BackHandler ----
+        if (zfOpen) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.surface,
+            ) {
+                ZfsoftImportScreen(
+                    onBack = { zfOpen = false },
+                    onResult = { result, source ->
+                        zfResult = result
+                        zfSource = source
+                        zfOpen = false
+                    },
+                )
+            }
         }
     }
 
@@ -613,7 +684,85 @@ fun ScheduleScreen() {
             },
         )
     }
+
+    // ---- 教务课表解析结果预览（v5.7） ----
+    zfResult?.let { res ->
+        AlertDialog(
+            onDismissRequest = { zfResult = null },
+            title = { Text("教务课表已解析") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "来源：" + zfSource + "　共 " + res.courses.size + " 个时段 / " +
+                            res.courseNames + " 门课",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "先核对下面前几条的星期与节次，确认没错位再导入：",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    res.courses.take(5).forEach { c ->
+                        Text(
+                            "· " + zfWeekdayLabel(c.weekday) + " 第 " + c.startPeriod + "-" +
+                                c.endPeriod + " 节　" + c.name +
+                                (if (c.location.isNotBlank()) "（" + c.location + "）" else ""),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    if (res.courses.size > 5) {
+                        Text(
+                            "…其余 " + (res.courses.size - 5) + " 个时段略",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (res.warnings.isNotEmpty()) {
+                        Text(
+                            res.warnings.joinToString("；"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    Text(
+                        "教务课表不含学期起始日与校历，周次按本机学期起始日推算；" +
+                            "合并＝加到现有课表后（去重），替换＝先备份现有课表再清空导入。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = {
+                        applyExternal(res.courses, true)
+                        zfResult = null
+                    }) { Text("合并导入") }
+                    Button(onClick = {
+                        applyExternal(res.courses, false)
+                        zfResult = null
+                    }) { Text("替换导入") }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { zfResult = null }) { Text("取消") }
+            },
+        )
+    }
 }
+
+/** 星期几的短名称：1→周一 … 7→周日 */
+private fun zfWeekdayLabel(w: Int): String =
+    when (w) {
+        1 -> "周一"
+        2 -> "周二"
+        3 -> "周三"
+        4 -> "周四"
+        5 -> "周五"
+        6 -> "周六"
+        7 -> "周日"
+        else -> "第" + w + "天"
+    }
 
 // ======================= 周表格（跨节占格） =======================
 
