@@ -59,11 +59,26 @@ object CourseColors {
  */
 object PeriodTable {
 
+    /**
+     * 福建农林大学（金山校区 / 金山学院）官方作息，共 12 节。
+     * 来源：金山学院官网 https://jsxy.fafu.edu.cn/47/2c/c517a83756/pagem.htm
+     *      教务处「作息时间安排表（金山校区）」https://jwc.fafu.edu.cn/_t44/e4/cb/c2012a58571/page.htm
+     * 注意：第 2、3 节之间还有一次 09:35-09:55 的课间，所以第 3 节从 09:55 开始，
+     * 不是「每节 40 分钟 + 固定 10 分钟」那种理想值（旧版默认值就是自己编的，全错）。
+     */
     private val DEFAULT_TIMES = listOf(
-        "08:00-08:45", "08:55-09:40", "10:00-10:45", "10:55-11:40",
-        "14:00-14:45", "14:55-15:40", "16:00-16:45", "16:55-17:40",
-        "19:00-19:45", "19:55-20:40", "20:50-21:35",
+        "08:00-08:45", "08:50-09:35", "09:55-10:40", "10:45-11:30", "11:35-12:20",
+        "14:00-14:45", "14:50-15:35", "15:50-16:35", "16:40-17:25",
+        "18:25-19:10", "19:15-20:00", "20:05-20:50",
     )
+
+    /** v5.8 之前那套错的默认作息（11 节，时间全对不上），只用于识别「用户没改过、要帮他换掉」。 */
+    private val LEGACY_DEFAULT_TIMES =
+        "08:00-08:45,08:55-09:40,10:00-10:45,10:55-11:40,14:00-14:45," +
+            "14:55-15:40,16:00-16:45,16:55-17:40,19:00-19:45,19:55-20:40,20:50-21:35"
+
+    /** 迁移版本号：老用户里存着旧默认作息的，升级后自动换成官方 12 节。 */
+    private const val MIGRATION_LEVEL = 1
 
     const val MAX_PERIODS = 24
 
@@ -76,6 +91,7 @@ object PeriodTable {
     @Volatile private var cacheList: List<String> = emptyList()
     /** 返回每节 "HH:mm-HH:mm"；条目损坏时按位补 "未设置-未设置"（T4：不再整体错位） */
     fun all(c: Context): List<String> {
+        ensureCurrentDefaults(c)
         val p = prefs(c)
         val ver = p.getInt("timesVer", 0)
         synchronized(this) {
@@ -132,8 +148,37 @@ object PeriodTable {
     fun endStr(c: Context, p: Int): String =
         all(c)[(p - 1).coerceIn(0, MAX_PERIODS - 1)].substringAfter("-")
 
-    fun periodsPerDay(c: Context): Int =
-        prefs(c).getInt("periodsPerDay", DEFAULT_TIMES.size).coerceIn(1, MAX_PERIODS)
+    fun periodsPerDay(c: Context): Int {
+        ensureCurrentDefaults(c)
+        return prefs(c).getInt("periodsPerDay", DEFAULT_TIMES.size).coerceIn(1, MAX_PERIODS)
+    }
+
+    @Volatile private var migrated = false
+
+    /**
+     * 老用户手上可能还存着旧版那套错作息（用户从没动过设置）。
+     * 升级后第一次读就换成官方 12 节：只有「存的值与旧默认一字不差」才动，
+     * 用户自己改过的作息绝不覆盖（那是他的学校/校区可能真的不一样）。
+     */
+    private fun ensureCurrentDefaults(c: Context) {
+        if (migrated) return
+        synchronized(this) {
+            if (migrated) return
+            val p = prefs(c)
+            if (p.getInt("timesMigrated", 0) < MIGRATION_LEVEL) {
+                val e = p.edit().putInt("timesMigrated", MIGRATION_LEVEL)
+                if (p.getString("periodTimes", null)?.trim() == LEGACY_DEFAULT_TIMES) {
+                    e.remove("periodTimes")
+                    if (p.getInt("periodsPerDay", 0) == LEGACY_DEFAULT_TIMES.split(",").size) {
+                        e.putInt("periodsPerDay", DEFAULT_TIMES.size)
+                    }
+                }
+                e.putInt("timesVer", p.getInt("timesVer", 0) + 1)
+                e.apply()
+            }
+            migrated = true
+        }
+    }
 
     fun setPeriodsPerDay(c: Context, n: Int) {
         prefs(c).edit().putInt("periodsPerDay", n.coerceIn(1, MAX_PERIODS)).apply()

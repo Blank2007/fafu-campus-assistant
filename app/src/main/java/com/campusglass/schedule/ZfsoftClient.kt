@@ -12,9 +12,11 @@ class ZfsoftException(message: String) : Exception(message)
  * 正方教务系统（旧版 V6）原生 HTTP 客户端 —— 零第三方依赖，只用 java.net。
  *
  * 本机实测的四个关键点（改动前请重看）：
- *  1. 服务器**不下发 Cookie**，会话靠 URL 里的 (一串会话ID)/ 前缀维持：
- *     任何请求都会 302 到 http://jwgl.fafu.edu.cn/(xxxx)/xxx.aspx，后续请求必须带这段前缀。
- *     所以这里每次都从跳转地址里动态抠前缀，绝不写死。
+ *  1. 两个站点的会话机制不一样，别写死：
+ *     - 校本部 jwgl：根路径 302 → http://jwgl.fafu.edu.cn/(会话ID)/default2.aspx，后续请求必须带这段前缀；
+ *     - 金山学院 jsxyjwgl：根路径直接 200、**没有**前缀，但会下发 ASP.NET_SessionId cookie。
+ *     所以前缀与 cookie 都要动态处理：从跳转地址里抠前缀，cookie 照常收发。
+ *     前缀为空时拼地址必须补一个斜杠（曾经的 bug：base + "" + "xskbcx.aspx" 拼成域名粘连的非法 URL）。
  *  2. 全站 GB2312：请求体、URL 参数、响应解码都要 GB2312，用 UTF-8 会一直登录失败。
  *  3. 登录表单 RadioButtonList1 的值是中文「学生」，且必须先过验证码（校验顺序：验证码 → 密码）。
  *  4. 课表页 xskbcx.aspx 必须带 xh（学号）、xm（姓名）与 Referer（xs_main.aspx），否则 302 回登录页。
@@ -72,7 +74,7 @@ object ZfsoftClient {
 
             if (findViewState(html).isBlank()) {
                 // 根路径不是登录表单（跳转页 / 别的入口），再试一次传统地址
-                val guess = site.base + prefix + "default2.aspx"
+                val guess = sitePath("default2.aspx")
                 val second = get(guess)
                 html = second.text()
                 pageUrl = second.finalUrl.ifBlank { guess }
@@ -85,14 +87,14 @@ object ZfsoftClient {
 
             val action = formAction(html)
             loginUrl = if (action.isBlank()) {
-                site.base + prefix + "default2.aspx"
+                sitePath("default2.aspx")
             } else {
                 absoluteUrl(action, pageUrl)
             }
 
             val codeSrc = captchaSrc(html)
             val codeUrl = if (codeSrc.isBlank()) {
-                site.base + prefix + "CheckCode.aspx"
+                sitePath("CheckCode.aspx")
             } else {
                 absoluteUrl(codeSrc, pageUrl)
             }
@@ -137,9 +139,10 @@ object ZfsoftClient {
         /** 抓课表页 HTML（GB2312 解码后返回） */
         fun fetchScheduleHtml(studentId: String, name: String): String {
             val sid = percentEncode(studentId.trim())
-            val url = site.base + prefix + "xskbcx.aspx?xh=" + sid +
-                "&xm=" + percentEncode(name) + "&gnmkdm=" + GNMKDM
-            val referer = site.base + prefix + "xs_main.aspx?xh=" + sid
+            val url = sitePath(
+                "xskbcx.aspx?xh=" + sid + "&xm=" + percentEncode(name) + "&gnmkdm=" + GNMKDM,
+            )
+            val referer = sitePath("xs_main.aspx?xh=" + sid)
             val resp = get(url, referer = referer)
             if (resp.code in 300..399) throw ZfsoftException("登录状态已失效，请重新登录后再抓取")
             val html = resp.text()
@@ -152,13 +155,24 @@ object ZfsoftClient {
 
         // ---------------- 内部实现 ----------------
 
+        /**
+         * 拼站点内的相对路径。
+         *
+         * 坑（v5.8 修）：校本部走 `/(会话ID)/` 前缀，金山学院**没有前缀**（根路径直接 200）。
+         * 以前一律写 site.base + prefix + "xskbcx.aspx"，prefix 为空时会拼成
+         * `http://jsxyjwgl.fafu.edu.cnxskbcx.aspx`（少了斜杠，域名变成一个不存在的主机），
+         * 登录成功之后抓课表必然失败。所有同站路径都必须过这里。
+         */
+        private fun sitePath(relative: String): String =
+            if (prefix.isEmpty()) site.base + "/" + relative else site.base + prefix + relative
+
         private class Resp(val code: Int, val bytes: ByteArray, val finalUrl: String, val location: String?) {
             fun text(): String = String(bytes, CHARSET)
         }
 
         private fun fetchName(studentId: String): String {
-            val url = site.base + prefix + "xs_main.aspx?xh=" + percentEncode(studentId)
-            val html = get(url, referer = site.base + prefix + "xs_main.aspx").text()
+            val url = sitePath("xs_main.aspx?xh=" + percentEncode(studentId))
+            val html = get(url, referer = sitePath("xs_main.aspx")).text()
             val raw = Regex("""id="xhxm"[^>]*>\s*([^<]+?)\s*<""").find(html)?.groupValues?.get(1).orEmpty()
             return raw.replace("同学", "").trim()
         }

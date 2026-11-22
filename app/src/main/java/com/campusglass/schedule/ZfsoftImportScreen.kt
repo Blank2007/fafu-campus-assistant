@@ -50,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -130,15 +131,25 @@ private fun AccountMode(onResult: (ZfsoftParser.ParseResult, String) -> Unit) {
     // 会话要跨「换验证码」保留：正方靠 URL 里的会话前缀维持登录态，重建会话等于重开一次登录
     var session by remember { mutableStateOf(ZfsoftClient.Session(ZfsoftClient.SITES[siteIdx])) }
 
-    fun refreshCaptcha() {
+    /**
+     * 取一张新验证码。
+     *
+     * 坑（已修）：以前这里无条件 error = ""，而 submit() 的失败分支是
+     * 「先 error = 失败原因，再 refreshCaptcha()」，于是失败原因刚写上就被抹掉 ——
+     * 用户看到的只有验证码悄悄换了一张、页面一个字都没有。
+     * 拿新验证码不等于「错误已解决」，所以默认由调用方决定要不要清。
+     */
+    fun refreshCaptcha(clearError: Boolean = true) {
         busy = true
-        error = ""
+        if (clearError) error = ""
         status = "正在连接教务系统…"
         scope.launch {
             try {
                 val bytes = withContext(Dispatchers.IO) { session.loadLoginPage() }
                 val bmp = withContext(Dispatchers.Default) {
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        ?.let { CaptchaImage.enhance(it) }
+                        ?.asImageBitmap()
                 }
                 captcha = bmp
                 code = ""
@@ -178,10 +189,10 @@ private fun AccountMode(onResult: (ZfsoftParser.ParseResult, String) -> Unit) {
                 val html = withContext(Dispatchers.IO) { session.fetchScheduleHtml(studentId, name) }
                 val parsed = withContext(Dispatchers.Default) { ZfsoftParser.parse(html) }
                 if (parsed.courses.isEmpty()) {
-                    error = parsed.warnings.firstOrNull() ?: "课表页里没解析到课程"
                     status = ""
                     busy = false
-                    refreshCaptcha()
+                    refreshCaptcha(clearError = false)
+                    error = parsed.warnings.firstOrNull() ?: "课表页里没解析到课程"
                     return@launch
                 }
                 if (rememberMe) {
@@ -193,14 +204,14 @@ private fun AccountMode(onResult: (ZfsoftParser.ParseResult, String) -> Unit) {
                 busy = false
                 onResult(parsed, "账号登录")
             } catch (e: ZfsoftException) {
+                status = ""
+                busy = false
+                refreshCaptcha(clearError = false)   // 验证码一次性，失败后必须换一张
                 error = e.message ?: "抓取失败"
-                status = ""
-                busy = false
-                refreshCaptcha()   // 验证码一次性，失败后必须换一张
             } catch (e: Exception) {
-                error = "抓取失败：" + (e.message ?: "网络异常")
                 status = ""
                 busy = false
+                error = "抓取失败：" + (e.message ?: "网络异常")
             }
         }
     }
@@ -245,24 +256,38 @@ private fun AccountMode(onResult: (ZfsoftParser.ParseResult, String) -> Unit) {
         ) {
             OutlinedTextField(
                 value = code,
-                onValueChange = { code = it.filter { c -> c.isLetterOrDigit() }.take(6) },
+                // 验证码里可能出现符号，不能只留字母数字（否则用户根本输不进去）
+                onValueChange = { code = it.filter { c -> !c.isWhitespace() }.take(6) },
                 label = { Text("验证码") },
                 singleLine = true,
                 modifier = Modifier.weight(1f),
             )
+            // 验证码是 72×27 的小位图，必须按「整数倍物理像素」放大显示：
+            // 非整数倍缩放会把笔画拉伸变形，看起来更清楚其实更容易读错字（踩过）。
+            val capBmp = captcha
+            val capBox = if (capBmp == null) {
+                Modifier.size(width = 240.dp, height = 90.dp)
+            } else {
+                with(LocalDensity.current) {
+                    val target = 232.dp.toPx()
+                    val k = (target / capBmp.width).toInt().coerceAtLeast(2)
+                    Modifier.size(
+                        width = (capBmp.width * k).toDp(),
+                        height = (capBmp.height * k).toDp(),
+                    )
+                }
+            }
             Box(
-                Modifier
-                    .size(width = 108.dp, height = 44.dp)
-                    .clickable(enabled = !busy) { refreshCaptcha() },
+                capBox.clickable(enabled = !busy) { refreshCaptcha() },
                 contentAlignment = Alignment.Center,
             ) {
-                val bmp = captcha
+                val bmp = capBmp
                 if (bmp != null) {
                     Image(
                         bitmap = bmp,
                         contentDescription = "验证码，点一下换一张",
                         filterQuality = FilterQuality.None,
-                        modifier = Modifier.size(width = 108.dp, height = 44.dp),
+                        modifier = Modifier.fillMaxSize(),
                     )
                 } else {
                     Text(
